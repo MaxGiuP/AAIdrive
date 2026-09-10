@@ -1,6 +1,11 @@
 AAIdrive
 ========
 
+This is [MaxGiuP's fork](https://github.com/MaxGiuP/AAIdrive), with YouTube Music
+ReVanced as the preferred player on a fresh setup and improvements for Audible,
+Rumble, and YouTube ReVanced. See the [fork setup and compatibility notes](docs/maxgiup-media.md)
+and [APK download](apk/README.md).
+
 [![Build Status](https://img.shields.io/github/actions/workflow/status/BimmerGestalt/AAIdrive/android-build.yml?branch=main)](https://github.com/BimmerGestalt/AAIdrive/actions?query=workflow%3Abuild)
 [![Code Coverage](https://img.shields.io/codecov/c/gh/BimmerGestalt/AAIdrive/main.svg)](https://codecov.io/gh/BimmerGestalt/AAIdrive)
 [![Crowdin](https://badges.crowdin.net/androidautoidrive/localized.svg)](https://crowdin.com/project/androidautoidrive)

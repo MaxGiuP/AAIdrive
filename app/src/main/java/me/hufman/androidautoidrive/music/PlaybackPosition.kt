@@ -8,12 +8,20 @@ class PlaybackPosition(val isPaused: Boolean,     // basically whether to show a
                        val isBuffering: Boolean,  // whether to show a loader spinner in AudioHmiState
                        val lastPositionUpdateTime: Long = SystemClock.elapsedRealtime(),
                        val lastPosition: Long,
-                       val maximumPosition: Long) {
+                       val maximumPosition: Long,
+                       val playbackSpeed: Float = 1f) {
 	fun getPosition(): Long {
+		return getPosition(if (isPaused || lastPositionUpdateTime == 0L) lastPositionUpdateTime else SystemClock.elapsedRealtime())
+	}
+
+	/** Estimate at a monotonic timestamp, respecting audiobook/video playback speed. */
+	fun getPosition(elapsedRealtime: Long): Long {
 		return if (isPaused || lastPositionUpdateTime == 0L) {
 			lastPosition
 		} else {
-			val estimatedPosition = lastPosition + (SystemClock.elapsedRealtime() - lastPositionUpdateTime)
+			val speed = if (playbackSpeed.isFinite()) playbackSpeed else 1f
+			val elapsed = (elapsedRealtime - lastPositionUpdateTime).coerceAtLeast(0)
+			val estimatedPosition = (lastPosition + (elapsed * speed.toDouble()).toLong()).coerceAtLeast(0)
 			if (maximumPosition >= 0) {
 				min(estimatedPosition, maximumPosition)
 			} else {

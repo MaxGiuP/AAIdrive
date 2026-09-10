@@ -7,6 +7,7 @@ import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
+import android.view.KeyEvent
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.launch
@@ -42,6 +43,7 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 
 			override fun onQueueTitleChanged(title: CharSequence?) {
 				controllerQueueTitle.value = title
+				callback?.invoke(this@GenericMusicAppController)
 			}
 
 			override fun onQueueChanged(queue: MutableList<MediaSessionCompat.QueueItem>?) {
@@ -73,11 +75,32 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 	}
 
 	override fun play() = remoteCall {
-		mediaController.transportControls.play()
+		// Read fresh state: a cached state could turn a repeated play command into pause.
+		val state = mediaController.playbackState
+		val actions = state?.actions ?: 0
+		if (actions and PlaybackStateCompat.ACTION_PLAY == 0L && actions and PlaybackStateCompat.ACTION_PLAY_PAUSE != 0L) {
+			if (state?.state in listOf(PlaybackStateCompat.STATE_NONE, PlaybackStateCompat.STATE_STOPPED,
+					PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.STATE_ERROR)) {
+				dispatchPlayPauseToggle()
+			}
+		} else {
+			mediaController.transportControls.play()
+		}
 	}
 
 	override fun pause() = remoteCall {
-		mediaController.transportControls.pause()
+		val state = mediaController.playbackState
+		val actions = state?.actions ?: 0
+		if (actions and PlaybackStateCompat.ACTION_PAUSE == 0L && actions and PlaybackStateCompat.ACTION_PLAY_PAUSE != 0L) {
+			if (state?.state == PlaybackStateCompat.STATE_PLAYING) dispatchPlayPauseToggle()
+		} else {
+			mediaController.transportControls.pause()
+		}
+	}
+
+	private fun dispatchPlayPauseToggle() {
+		mediaController.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+		mediaController.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
 	}
 
 	override fun skipToPrevious() = remoteCall {
@@ -99,8 +122,15 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 	}
 
 	override fun playQueue(song: MusicMetadata) = remoteCall {
-		if (song.queueId != null) {
-			mediaController.transportControls.skipToQueueItem(song.queueId)
+		val queueId = song.queueId?.takeUnless { it == MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong() }
+		val actions = controllerPlaybackState.value?.actions ?: 0
+		when {
+			queueId != null && actions and PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM != 0L ->
+				mediaController.transportControls.skipToQueueItem(queueId)
+			!song.mediaId.isNullOrBlank() && actions and PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID != 0L ->
+				mediaController.transportControls.playFromMediaId(song.mediaId, song.extras)
+			// Preserve support for sessions which implement queue selection but omit its action flag.
+			queueId != null -> mediaController.transportControls.skipToQueueItem(queueId)
 		}
 	}
 
@@ -171,13 +201,14 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 					state.state == PlaybackStateCompat.STATE_CONNECTING ||
 					state.state == PlaybackStateCompat.STATE_BUFFERING
 					)
-			PlaybackPosition(isPaused, isBuffering, state.lastPositionUpdateTime, state.position, metadata?.duration ?: -1)
+			PlaybackPosition(isPaused, isBuffering, state.lastPositionUpdateTime, state.position, metadata?.duration ?: -1, state.playbackSpeed)
 		}
 	}
 
 	override fun isSupportedAction(action: MusicAction): Boolean {
 		val actions = remoteData { controllerPlaybackState.value?.actions } ?: 0
-		return (actions and action.flag) > 0
+		return (actions and action.flag) > 0 ||
+				((action == MusicAction.PLAY || action == MusicAction.PAUSE) && actions and PlaybackStateCompat.ACTION_PLAY_PAUSE != 0L)
 	}
 
 	override fun getCustomActions(): List<CustomAction> {

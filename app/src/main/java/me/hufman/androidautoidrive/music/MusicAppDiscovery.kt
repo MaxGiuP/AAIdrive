@@ -32,6 +32,7 @@ class MusicAppDiscovery(val context: Context, val handler: Handler): CoroutineSc
 
 	private var discoveryJob: Job? = null
 	private val browseApps: MutableList<MusicAppInfo> = LinkedList()
+	private val installedSessionApps: MutableList<MusicAppInfo> = LinkedList()
 	private val combinedApps: MutableList<MusicAppInfo> = Collections.synchronizedList(LinkedList())
 
 	// all detected apps
@@ -150,6 +151,15 @@ class MusicAppDiscovery(val context: Context, val handler: Handler): CoroutineSc
 
 		this.browseApps.sortBy { it.name.lowercase() }
 
+		// Keep known session-only players in the phone's app list even before playback starts.
+		// They become selectable in the car once they expose a controllable MediaSession.
+		val browsePackages = browseApps.map { it.packageName }.toSet()
+		installedSessionApps.clear()
+		installedSessionApps.addAll(MusicAppCompatibility.SESSION_APP_PACKAGES
+			.filterNot { it in browsePackages }
+			.mapNotNull { MusicAppInfo.getInstance(context, it, null) }
+			.onEach { it.probed = true })
+
 		// load the music session apps
 		addSessionApps()
 	}
@@ -182,6 +192,7 @@ class MusicAppDiscovery(val context: Context, val handler: Handler): CoroutineSc
 	fun addSessionApps() {
 		// discover Music Sessions
 		val apps = ArrayList(this.browseApps)
+		apps.addAll(installedSessionApps)
 
 		val appsByName = apps.associateBy { it.packageName }
 		val mediaSessionApps = musicSessions.discoverApps()

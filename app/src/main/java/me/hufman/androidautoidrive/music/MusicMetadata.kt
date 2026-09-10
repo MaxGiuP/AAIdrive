@@ -71,7 +71,7 @@ open class MusicMetadata(val mediaId: String? = null,
 
 			return MusicMetadata(
 					mediaId = metadata.mediaId,
-					queueId = playbackState?.activeQueueItemId,
+					queueId = playbackState?.activeQueueItemId?.takeUnless { it == MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong() },
 					duration = metadata.getLong(MediaMetadataCompat.METADATA_KEY_DURATION),
 					coverArt = metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ART) ?:
 							metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART) ?:
@@ -107,9 +107,13 @@ open class MusicMetadata(val mediaId: String? = null,
 		fun fromQueueItem(queueItem: MediaSessionCompat.QueueItem): MusicMetadata {
 			val id = queueItem.queueId
 			val desc = queueItem.description
-			return MusicMetadata(queueId = id,
+			return MusicMetadata(mediaId = desc.mediaId,
+					queueId = id.takeUnless { it == MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong() },
+					playable = true,
+					coverArt = desc.iconBitmap,
+					coverArtUri = desc.iconUri?.toString(),
 					icon = desc.iconBitmap,
-					title = desc.title.toString(),
+					title = desc.title?.toString(),
 					subtitle = desc.subtitle?.toString(),
 					artist = desc.extras?.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST) ?:
 							desc.extras?.getString(MediaMetadataCompat.METADATA_KEY_ARTIST),
@@ -122,6 +126,18 @@ open class MusicMetadata(val mediaId: String? = null,
 		         coverArtUri: String? = null, icon: Bitmap? = null, artist: String? = null, album: String? = null, title: String? = null, subtitle: String? = null, trackCount: Long? = null,
 		         trackNumber: Long? = null): MusicMetadata {
 			return MusicMetadata(mediaId = mediaId ?: other.mediaId, queueId = queueId ?: other.queueId, playable = playable ?: other.playable, browseable = browseable ?: other.browseable, duration = duration ?: other.duration, coverArt = coverArt ?: other.coverArt, coverArtUri = coverArtUri ?: other.coverArtUri, icon = icon ?: other.icon, artist = artist ?: other.artist, album = album ?: other.album, title = title ?: other.title, subtitle = subtitle ?: other.subtitle, trackCount = trackCount ?: other.trackCount, trackNumber = trackNumber ?: other.trackNumber)
+		}
+	}
+
+	/** Prefer queue IDs to distinguish repeated songs, falling back to the media ID when absent. */
+	fun matchesQueueItem(other: MusicMetadata?): Boolean {
+		if (other == null) return false
+		val thisQueueId = queueId?.takeUnless { it == MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong() }
+		val otherQueueId = other.queueId?.takeUnless { it == MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong() }
+		return if (thisQueueId != null && otherQueueId != null) {
+			thisQueueId == otherQueueId
+		} else {
+			!mediaId.isNullOrBlank() && mediaId == other.mediaId
 		}
 	}
 

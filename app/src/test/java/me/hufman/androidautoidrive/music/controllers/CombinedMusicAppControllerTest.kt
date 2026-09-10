@@ -1,5 +1,7 @@
 package me.hufman.androidautoidrive.music.controllers
 
+import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.MediaSessionCompat
 import org.mockito.kotlin.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -105,6 +107,41 @@ class CombinedMusicAppControllerTest {
 		controller.withController(callback)
 		verify(callback, times(2)).invoke(leftController)
 		verify(callback, times(3)).invoke(rightController)
+	}
+
+	@Test
+	fun pausesDuplicateBrowserAndSessionControllerOnlyOnce() {
+		val token = mock<MediaSessionCompat.Token>()
+		val browserSession = mock<MediaControllerCompat> { on { sessionToken } doReturn token }
+		val activeSession = mock<MediaControllerCompat> { on { sessionToken } doReturn token }
+		val browserController = mock<GenericMusicAppController> { on { mediaController } doReturn browserSession }
+		val sessionController = mock<GenericMusicAppController> { on { mediaController } doReturn activeSession }
+		leftObservable.value = browserController
+		rightObservable.value = sessionController
+		controller.pause()
+		verify(browserController).pause()
+		verify(sessionController, never()).pause()
+	}
+
+	@Test
+	fun pausesDistinctSessionsAndControllersWithoutTokens() {
+		val firstToken = mock<MediaSessionCompat.Token>()
+		val secondToken = mock<MediaSessionCompat.Token>()
+		val firstSession = mock<MediaControllerCompat> { on { sessionToken } doReturn firstToken }
+		val secondSession = mock<MediaControllerCompat> { on { sessionToken } doReturn secondToken }
+		val first = mock<GenericMusicAppController> { on { mediaController } doReturn firstSession }
+		val second = mock<GenericMusicAppController> { on { mediaController } doReturn secondSession }
+		leftObservable.value = first
+		rightObservable.value = second
+		controller.pause()
+		verify(first).pause()
+		verify(second).pause()
+
+		whenever(firstSession.sessionToken) doReturn null
+		whenever(secondSession.sessionToken) doReturn null
+		controller.pause()
+		verify(first, times(2)).pause()
+		verify(second, times(2)).pause()
 	}
 
 	@Test

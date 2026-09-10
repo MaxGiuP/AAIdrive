@@ -5,6 +5,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class CustomActionTest {
+	@Test
+	fun qualifiedSpokenAudioSeekActions() {
+		val backward = listOf("player.action.SKIP_BACK_30", "player.action.SEEK_15_SECONDS_BACK", "player.action.REWIND", "skipToPrevious")
+		val forward = listOf("player.action.SKIP_FORWARD_30", "player.action.SEEK_15_SECONDS_FORWARD", "player.action.FAST_FORWARD", "skip_to_next")
+		(backward.map { it to MusicAction.SKIP_TO_PREVIOUS } + forward.map { it to MusicAction.SKIP_TO_NEXT }).forEach { (name, expected) ->
+			val action = CustomAction.enableProvidesAction(caNamed("test.player", name))
+			assertEquals(expected, action.providesAction)
+			assert(CustomAction.enableDwellAction(action) is CustomActionDwell)
+		}
+		assertEquals(null, CustomAction.enableProvidesAction(caNamed("test", "player.action.ENABLE_SKIP_FORWARD")).providesAction)
+	}
+
 	fun caNamed(packageName: String, action: String): CustomAction {
 		return CustomAction(packageName, action, action, 0, null, null, null)
 	}

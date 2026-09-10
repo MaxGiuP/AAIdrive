@@ -45,7 +45,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 
 	var songsListAdapter = object: RHMIModel.RaListModel.RHMIListAdapter<MusicMetadata>(4, songsList) {
 		override fun convertRow(index: Int, item: MusicMetadata): Array<Any> {
-			val checkmark = if (item.queueId == currentSong?.queueId) BMWRemoting.RHMIResourceIdentifier(BMWRemoting.RHMIResourceType.IMAGEID, musicImageIDs.CHECKMARK) else ""
+			val checkmark = if (item.matchesQueueItem(currentSong)) BMWRemoting.RHMIResourceIdentifier(BMWRemoting.RHMIResourceType.IMAGEID, musicImageIDs.CHECKMARK) else ""
 
 			val coverArt = item.coverArt
 			val coverArtImage = if (coverArt != null) graphicsHelpers.compress(coverArt, 90, 90, quality = 30) else ""
@@ -119,6 +119,8 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 
 		queueMetadata = newQueueMetadata
 		songsList.clear()
+		visibleRows = emptyList()
+		visibleRowsOriginalMusicMetadata = emptyList()
 		val songs = queueMetadata?.songs ?: emptyList()
 		if (songs.any {it.coverArt != null || it.coverArtUri != null}) {
 			listComponent.setProperty(RHMIProperty.PropertyId.LIST_COLUMNWIDTH, "57,90,10,*")
@@ -132,8 +134,9 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 			listComponent.requestDataCallback = RequestDataCallback { startIndex, numRows ->
 				showList(startIndex, numRows)
 
-				val endIndex = if (startIndex + numRows >= songsList.size) songsList.size - 1 else startIndex + numRows
-				visibleRows = songsListAdapter.realData.subList(startIndex, endIndex + 1).toMutableList()
+				val start = startIndex.coerceIn(0, songsList.size)
+				val end = start + numRows.coerceIn(0, songsList.size - start)
+				visibleRows = songsListAdapter.realData.subList(start, end).toMutableList()
 				visibleRowsOriginalMusicMetadata = visibleRows.map { MusicMetadata.copy(it) }
 			}
 
@@ -197,7 +200,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 	 * Sets the list selection to the current song.
 	 */
 	private fun setSelectionToCurrentSong() {
-		val index = songsList.indexOfFirst { it.queueId == currentSong?.queueId }
+		val index = songsList.indexOfFirst { it.matchesQueueItem(currentSong) }
 		if (index >= 0) {
 			state.app.events.values.firstOrNull { it is RHMIEvent.FocusEvent }?.triggerEvent(
 					mapOf(0.toByte() to listComponent.id, 41.toByte() to index)
@@ -225,7 +228,9 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 	 * Shows the list component content from the start index for the specified number of rows.
 	 */
 	private fun showList(startIndex: Int = 0, numRows: Int = 10) {
-		val updatedList = ArrayList(songsList.subList(max(0, startIndex), min(songsList.size, startIndex + numRows)))
+		if (startIndex < 0 || startIndex > songsList.size || numRows < 0) return
+		val endIndex = startIndex + min(numRows, songsList.size - startIndex)
+		val updatedList = ArrayList(songsList.subList(startIndex, endIndex))
 		if (updatedList.any {it.coverArt != null || it.coverArtUri != null}) {
 			listComponent.setProperty(RHMIProperty.PropertyId.LIST_COLUMNWIDTH, "57,90,10,*")
 		}   // don't collapse the column if this window of data happens to not have coverart, so no else branch here
@@ -239,9 +244,9 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 	 * Shows the currently playing song.
 	 */
 	private fun showCurrentlyPlayingSong(showNeighbors: Boolean) {
-		val oldPlayingIndex = songsList.indexOfFirst { it.queueId == currentSong?.queueId }
+		val oldPlayingIndex = songsList.indexOfFirst { it.matchesQueueItem(currentSong) }
 		currentSong = musicController.getMetadata()
-		val playingIndex = songsList.indexOfFirst { it.queueId == currentSong?.queueId }
+		val playingIndex = songsList.indexOfFirst { it.matchesQueueItem(currentSong) }
 
 		// song actually playing is different than what the current song is, then update checkmark
 		if (oldPlayingIndex != playingIndex) {
@@ -269,7 +274,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 	 */
 	private fun onClick(index: Int) {
 		val song = songsList.getOrNull(index)
-		if (song?.queueId != null) {
+		if (song != null && (song.queueId != null || !song.mediaId.isNullOrBlank())) {
 			musicController.playQueue(song)
 		}
 	}

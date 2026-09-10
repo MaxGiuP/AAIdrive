@@ -482,8 +482,8 @@ class MusicAppTest {
 		assertEquals("EntICPlaylist", mockServer.data[IDs.IC_USECASE_MODEL])
 		val displayedTitles = (mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data.map {it[1]}.toTypedArray()
 		val displayedChecks = (mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data.map {it[5]}.toTypedArray()
-		assertArrayEquals(arrayOf("< Back", "Title", "Next >", "Song 3", "Song 6"), displayedTitles)
-		assertArrayEquals(arrayOf(0, 1, 0, 0, 0), displayedChecks)
+		assertArrayEquals(arrayOf("Song 1", "Song 3", "Song 6"), displayedTitles)
+		assertArrayEquals(arrayOf(1, 0, 0), displayedChecks)
 
 		// change song, the checkbox should move
 		whenever(musicController.getMetadata()) doReturn MusicMetadata("testId", queueId=20,
@@ -493,8 +493,8 @@ class MusicAppTest {
 		globalState.redraw()
 		val displayedTitles2 = (mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data.map {it[1]}.toTypedArray()
 		val displayedChecks2 = (mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data.map {it[5]}.toTypedArray()
-		assertArrayEquals(arrayOf("Song 1", "Song 3", "< Back", "Song 6", "Next >"), displayedTitles2)
-		assertArrayEquals(arrayOf(0, 0, 0, 1, 0), displayedChecks2)
+		assertArrayEquals(arrayOf("Song 1", "Song 3", "Song 6"), displayedTitles2)
+		assertArrayEquals(arrayOf(0, 0, 1), displayedChecks2)
 	}
 
 	@Test
@@ -1147,6 +1147,76 @@ class MusicAppTest {
 	}
 
 	@Test
+	fun testAudioStateSelectsEntireQueueAndRefreshesReorderedTracks() {
+		val mockServer = MockBMWRemotingServer()
+		val app = RHMIApplicationEtch(mockServer, 1)
+		app.loadFromXML(this.javaClass.classLoader!!.getResourceAsStream("ui_description_multimedia_v3.xml")!!.readBytes())
+		val state = app.states[IDs.AUDIO_STATE] as RHMIState.AudioHmiState
+		val playbackView = PlaybackView(state, musicController, mapOf(), phoneAppResources, graphicsHelpers, MusicImageIDsSpotify, mock())
+		val songs = (0 until 150).map { MusicMetadata(queueId = it.toLong(), mediaId = "song-${it % 75}", title = "Song $it") }
+		whenever(musicController.getQueue()) doReturn QueueMetadata(title = "Playlist", songs = songs)
+		whenever(musicController.getMetadata()) doReturn songs[88]
+		playbackView.initWidgetsLater()
+		playbackView.show()
+
+		val playlist = mockServer.data[IDs.AUDIOSTATE_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable
+		assertEquals(150, playlist.totalRows)
+		assertEquals("Song 149", playlist.data[149][2])
+		assertEquals(88, state.getPlayListFocusRowModel()?.asRaIntModel()?.value)
+		state.getPlayListAction()?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 149))
+		verify(musicController).playQueue(songs[149])
+		state.getPlayListAction()?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 88))
+		verify(musicController).playQueue(songs[88])
+		verify(musicController, never()).seekTo(any())
+		verify(musicController, never()).skipToPrevious()
+		verify(musicController, never()).skipToNext()
+
+		// Background updates preserve the user's scroll position while nothing changes.
+		state.getPlayListFocusRowModel()?.asRaIntModel()?.value = 20
+		playbackView.redraw()
+		assertEquals(20, state.getPlayListFocusRowModel()?.asRaIntModel()?.value)
+
+		// Reordering the same playlist must update the rows and their action targets together.
+		whenever(musicController.getQueue()) doReturn QueueMetadata(title = "Playlist", songs = songs.reversed())
+		playbackView.redraw()
+		val reordered = mockServer.data[IDs.AUDIOSTATE_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable
+		assertEquals("Song 0", reordered.data[149][2])
+		assertEquals(61, state.getPlayListFocusRowModel()?.asRaIntModel()?.value)
+		state.getPlayListAction()?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 149))
+		verify(musicController).playQueue(songs[0])
+	}
+
+	@Test
+	fun testQueueInputSelectsDistantTrackWithMediaId() {
+		val mockServer = MockBMWRemotingServer()
+		val app = RHMIApplicationEtch(mockServer, 1)
+		app.loadFromXML(carAppResources.getUiDescription()?.readBytes() as ByteArray)
+		val state = app.states[IDs.QUEUE_STATE] as RHMIState.PlainState
+		val playbackView = PlaybackView(app.states[IDs.PLAYBACK_STATE]!!, musicController, mapOf(), phoneAppResources, graphicsHelpers, MusicImageIDsMultimedia, mock())
+		val queueView = EnqueuedView(state, musicController, graphicsHelpers, MusicImageIDsMultimedia)
+		val songs = (0 until 150).map { MusicMetadata(mediaId = "track-$it", title = "Song $it") }
+		whenever(musicController.getQueue()) doReturn QueueMetadata(title = "Playlist", songs = songs)
+		whenever(musicController.getMetadata()) doReturn MusicMetadata(mediaId = "track-125")
+		queueView.initWidgets(playbackView)
+		queueView.show()
+		queueView.listComponent.requestDataCallback?.onRequestData(120, 10)
+
+		val queueList = mockServer.data[IDs.QUEUE_LIST_MODEL] as BMWRemoting.RHMIDataTable
+		assertEquals(150, queueList.totalRows)
+		assertTrue(isChecked(queueList, 125))
+		assertFalse(isChecked(queueList, 124))
+		assertEquals(10, queueView.visibleRows.size)
+		queueView.listComponent.getAction()?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 149))
+		verify(musicController).playQueue(songs[149])
+
+		// A delayed page request from the old playlist must be safe after the queue shrinks.
+		whenever(musicController.getQueue()) doReturn QueueMetadata(title = "Playlist", songs = songs.take(2))
+		queueView.redraw()
+		queueView.listComponent.requestDataCallback?.onRequestData(120, 10)
+		assertTrue(queueView.visibleRows.isEmpty())
+	}
+
+	@Test
 	fun testQueueViewQueueTitleAndSubtitle() {
 		val mockServer = MockBMWRemotingServer()
 		val app = RHMIApplicationEtch(mockServer, 1)
@@ -1229,24 +1299,20 @@ class MusicAppTest {
 		globalState.redraw()
 		assertEquals("EntICPlaylist", mockServer.data[IDs.IC_USECASE_MODEL])
 		val list = mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable
-		assertEquals(5, list.totalRows)
-		assertEquals("< Back", list.data[0][1])
-		assertEquals("Title", list.data[1][1])
-		assertEquals("Artist", list.data[1][2])
-		assertEquals("Album", list.data[1][3])
-		assertEquals(1, list.data[1][5])
-		assertEquals("Next >", list.data[2][1])
-		assertEquals("Song 3", list.data[3][1])
-		assertEquals("", list.data[3][2])
-		assertEquals("", list.data[3][3])
-		assertEquals(0, list.data[3][5])
-		assertEquals("Song 6", list.data[4][1])
+		assertEquals(3, list.totalRows)
+		assertEquals("Song 1", list.data[0][1])
+		assertEquals("Artist", list.data[0][2])
+		assertEquals("Album", list.data[0][3])
+		assertEquals(1, list.data[0][5])
+		assertEquals("Song 3", list.data[1][1])
+		assertEquals("", list.data[1][2])
+		assertEquals("", list.data[1][3])
+		assertEquals(0, list.data[1][5])
+		assertEquals("Song 6", list.data[2][1])
 
 		app.actions[IDs.IC_TRACK_ACTION]?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 0))
-		verify(musicController, times(2)).skipToPrevious()
+		verify(musicController).playQueue(MusicMetadata(queueId=10, title="Song 1", album="Album", artist="Artist"))
 		app.actions[IDs.IC_TRACK_ACTION]?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 2))
-		verify(musicController, times(2)).skipToNext()
-		app.actions[IDs.IC_TRACK_ACTION]?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 4))
 		verify(musicController).playQueue(MusicMetadata(queueId=20, title="Song 6"))
 
 		// a queue without the song in place
@@ -1256,8 +1322,33 @@ class MusicAppTest {
 		)) }
 		globalState.redraw()
 		val missingList = mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable
-		assertArrayEquals(arrayOf("< Back", "Title", "Next >"), missingList.data.map {it[1]}.toTypedArray())
-		assertArrayEquals(arrayOf(0, 1, 0), missingList.data.map {it[5]}.toTypedArray())
+		assertArrayEquals(arrayOf("Song 3", "Song 6"), missingList.data.map {it[1]}.toTypedArray())
+		assertArrayEquals(arrayOf(0, 0), missingList.data.map {it[5]}.toTypedArray())
+	}
+
+	@Test
+	fun testInstrumentClusterKeepsCompleteQueueWithUnknownCurrentQueueId() {
+		val mockServer = MockBMWRemotingServer()
+		val app = RHMIApplicationEtch(mockServer, 1)
+		app.loadFromXML(carAppResources.getUiDescription()?.readBytes() as ByteArray)
+		val globalState = GlobalMetadata(app, musicController)
+		val songs = (0 until 150).map { MusicMetadata(mediaId = "track-$it", title = "Song $it") }
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = songs)
+		whenever(musicController.getMetadata()) doReturn MusicMetadata(mediaId = "track-75")
+		globalState.initWidgets()
+		globalState.redraw()
+
+		val playlist = mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable
+		assertEquals(150, playlist.totalRows)
+		assertEquals(1, playlist.data[75][5])
+		assertEquals(0, playlist.data[74][5])
+		app.actions[IDs.IC_TRACK_ACTION]?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 149))
+		verify(musicController).playQueue(songs[149])
+
+		// A temporary missing current track must not discard the available playlist.
+		whenever(musicController.getMetadata()) doReturn MusicMetadata(mediaId = "unavailable-track")
+		globalState.redraw()
+		assertEquals(150, (mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).totalRows)
 	}
 
 	@Test
@@ -2948,6 +3039,66 @@ class MusicAppTest {
 		verify(musicController).customAction(CustomAction(
 				"packageName", "actionName", "Custom Name", 0, null, null, null
 		))
+	}
+
+	@Test
+	fun testDefaultMusicAppOnFreshSetup() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())
+		val discoveryListener = argumentCaptor<Runnable>()
+		verify(musicAppDiscovery).listener = discoveryListener.capture()
+		val revanced = MusicAppInfo("YouTube Music ReVanced", mock(), "app.revanced.android.apps.youtube.music", "BrowserService")
+		val stock = MusicAppInfo("YouTube Music", mock(), "com.google.android.apps.youtube.music", "BrowserService")
+		whenever(musicAppDiscovery.allApps) doReturn listOf(stock, revanced)
+		// No cache or active session is needed for the initial browser connection.
+		whenever(musicAppDiscovery.validApps) doReturn emptyList()
+		discoveryListener.lastValue.run()
+		verify(musicController).connectAppAutomatically(same(revanced))
+		verify(musicController, never()).connectAppAutomatically(same(stock))
+	}
+
+	@Test
+	fun testDefaultMusicAppPreservesLastSelection() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())
+		val discoveryListener = argumentCaptor<Runnable>()
+		verify(musicAppDiscovery).listener = discoveryListener.capture()
+		val revanced = MusicAppInfo("YouTube Music ReVanced", mock(), "app.revanced.android.apps.youtube.music", "BrowserService")
+		val audible = MusicAppInfo("Audible", mock(), MusicAppCompatibility.AUDIBLE_PACKAGE, "BrowserService")
+		whenever(musicAppDiscovery.allApps) doReturn listOf(audible, revanced)
+		whenever(musicAppDiscovery.validApps) doReturn listOf(audible, revanced)
+		whenever(musicController.loadDesiredApp()) doReturn audible.packageName
+		discoveryListener.lastValue.run()
+		verify(musicController).connectAppAutomatically(same(audible))
+		verify(musicController, never()).connectAppAutomatically(same(revanced))
+	}
+
+	@Test
+	fun testDefaultMusicAppDoesNotReplaceUnavailableSavedSelection() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())
+		val discoveryListener = argumentCaptor<Runnable>()
+		verify(musicAppDiscovery).listener = discoveryListener.capture()
+		val revanced = MusicAppInfo("YouTube Music ReVanced", mock(), "app.revanced.android.apps.youtube.music", "BrowserService")
+		whenever(musicAppDiscovery.allApps) doReturn listOf(revanced)
+		whenever(musicController.loadDesiredApp()) doReturn MusicAppCompatibility.AUDIBLE_PACKAGE
+		discoveryListener.lastValue.run()
+		verify(musicController, never()).connectAppAutomatically(any())
+	}
+
+	@Test
+	fun testDefaultMusicAppDoesNotInterruptAnotherPlayingApp() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())
+		val discoveryListener = argumentCaptor<Runnable>()
+		verify(musicAppDiscovery).listener = discoveryListener.capture()
+		val revanced = MusicAppInfo("YouTube Music ReVanced", mock(), "app.revanced.android.apps.youtube.music", "BrowserService")
+		val rumble = MusicAppInfo("Rumble", mock(), MusicAppCompatibility.RUMBLE_PACKAGE, null)
+		whenever(musicAppDiscovery.allApps) doReturn listOf(revanced, rumble)
+		whenever(musicController.musicSessions.getPlayingApp()) doReturn rumble
+		discoveryListener.lastValue.run()
+		verify(musicController, atLeastOnce()).connectAppAutomatically(same(rumble))
+		verify(musicController, never()).connectAppAutomatically(same(revanced))
 	}
 
 	@Test

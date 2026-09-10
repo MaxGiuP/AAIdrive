@@ -8,13 +8,16 @@ import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import org.mockito.kotlin.*
 import kotlinx.coroutines.runBlocking
 import me.hufman.androidautoidrive.music.*
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito.mockConstruction
 
 
 class GenericMusicAppControllerTest {
@@ -34,12 +37,62 @@ class GenericMusicAppControllerTest {
 			on { state } doReturn stateValue
 			on { position } doReturn positionValue
 			on { actions } doReturn actionsValue
+			on { playbackSpeed } doReturn 1f
 		}
 	}
 
 	@Before
 	fun setup() {
 		controller = GenericMusicAppController(context, mediaController, musicBrowser)
+	}
+
+	@Test
+	fun toggleOnlyPlaybackUsesMediaKeysAndFreshState() {
+		val paused = createPlaybackState(PlaybackStateCompat.STATE_PAUSED, 0, PlaybackStateCompat.ACTION_PLAY_PAUSE)
+		val playing = createPlaybackState(PlaybackStateCompat.STATE_PLAYING, 0, PlaybackStateCompat.ACTION_PLAY_PAUSE)
+		mockConstruction(KeyEvent::class.java) { event, construction ->
+			whenever(event.action) doReturn (construction.arguments()[0] as Int)
+			whenever(event.keyCode) doReturn (construction.arguments()[1] as Int)
+		}.use {
+			whenever(mediaController.playbackState) doReturn paused
+			assertTrue(controller.isSupportedAction(MusicAction.PLAY))
+			assertTrue(controller.isSupportedAction(MusicAction.PAUSE))
+			controller.play()
+			whenever(mediaController.playbackState) doReturn playing
+			controller.play() // already playing: do not accidentally pause
+			controller.pause()
+			whenever(mediaController.playbackState) doReturn paused
+			controller.pause() // already paused: do not accidentally start playback
+			val events = argumentCaptor<KeyEvent>()
+			verify(mediaController, times(4)).dispatchMediaButtonEvent(events.capture())
+			assertEquals(listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP, KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP), events.allValues.map { event -> event.action })
+			assertTrue(events.allValues.all { event -> event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE })
+			verifyNoInteractions(mediaTransportControls)
+		}
+	}
+
+	@Test
+	fun prefersDiscretePlayPauseActionsWhenAvailable() {
+		val state = createPlaybackState(PlaybackStateCompat.STATE_PAUSED, 0,
+			PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE)
+		whenever(mediaController.playbackState) doReturn state
+		controller.play()
+		controller.pause()
+		verify(mediaTransportControls).play()
+		verify(mediaTransportControls).pause()
+		verify(mediaController, never()).dispatchMediaButtonEvent(any())
+	}
+
+	@Test
+	fun doesNotToggleDuringAnAmbiguousLoadingState() {
+		listOf(PlaybackStateCompat.STATE_CONNECTING, PlaybackStateCompat.STATE_BUFFERING).forEach { state ->
+			val playback = createPlaybackState(state, 0, PlaybackStateCompat.ACTION_PLAY_PAUSE)
+			whenever(mediaController.playbackState) doReturn playback
+			controller.play()
+			controller.pause()
+		}
+		verify(mediaController, never()).dispatchMediaButtonEvent(any())
+		verifyNoInteractions(mediaTransportControls)
 	}
 
 	@Test
@@ -75,6 +128,45 @@ class GenericMusicAppControllerTest {
 			createPlaybackState(0, 0, MusicAction.PLAY.flag)
 		}
 		assertTrue(controller.isSupportedAction(MusicAction.PLAY))
+	}
+
+	@Test
+	fun testQueueSelectionPrefersQueueIdWhenSupported() {
+		val playbackState = createPlaybackState(0, 0,
+			PlaybackStateCompat.ACTION_SKIP_TO_QUEUE_ITEM or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID)
+		whenever(mediaController.playbackState) doReturn playbackState
+		controller.playQueue(MusicMetadata(mediaId = "repeated-song", queueId = 42))
+		verify(mediaTransportControls).skipToQueueItem(42)
+		verify(mediaTransportControls, never()).playFromMediaId(any(), anyOrNull())
+	}
+
+	@Test
+	fun testQueueSelectionFallsBackToMediaId() {
+		val extras = mock<Bundle>()
+		val playbackState = createPlaybackState(0, 0,
+			PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID)
+		whenever(mediaController.playbackState) doReturn playbackState
+		controller.playQueue(MusicMetadata(mediaId = "playlist-song", queueId = 42, extras = extras))
+		verify(mediaTransportControls).playFromMediaId("playlist-song", extras)
+		verify(mediaTransportControls, never()).skipToQueueItem(any())
+	}
+
+	@Test
+	fun testQueueSelectionWithOnlyMediaId() {
+		val playbackState = createPlaybackState(0, 0,
+			PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID)
+		whenever(mediaController.playbackState) doReturn playbackState
+		controller.playQueue(MusicMetadata(mediaId = "playlist-song"))
+		verify(mediaTransportControls).playFromMediaId("playlist-song", null)
+		verify(mediaTransportControls, never()).skipToQueueItem(any())
+	}
+
+	@Test
+	fun testQueueSelectionDoesNotSendUnknownIdsOrUnsupportedMediaIdAction() {
+		controller.playQueue(MusicMetadata(queueId = MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()))
+		controller.playQueue(MusicMetadata(mediaId = "playlist-song"))
+		controller.playQueue(MusicMetadata())
+		verifyNoInteractions(mediaTransportControls)
 	}
 
 	@Test
@@ -224,6 +316,32 @@ class GenericMusicAppControllerTest {
 	}
 
 	@Test
+	fun testQueueContainsEveryPublishedSongInOrder() {
+		val queueItems = (0 until 150).map { index ->
+			val descriptionValue = mock<MediaDescriptionCompat> {
+				on { mediaId } doReturn "song-$index"
+				on { title } doReturn "Song $index"
+			}
+			mock<MediaSessionCompat.QueueItem> {
+				on { queueId } doReturn index.toLong()
+				on { description } doReturn descriptionValue
+			}
+		}
+		whenever(mediaController.queue) doReturn queueItems
+		val songs = controller.getQueue()?.songs!!
+		assertEquals(150, songs.size)
+		assertEquals((0 until 150).map { "song-$it" }, songs.map { it.mediaId })
+		controller.playQueue(songs.last())
+		verify(mediaTransportControls).skipToQueueItem(149)
+	}
+
+	@Test
+	fun testUnavailableQueueIsNotFabricatedFromCurrentTrack() {
+		whenever(mediaController.queue) doReturn null
+		assertNull(controller.getQueue()?.songs)
+	}
+
+	@Test
 	fun testMetadata() {
 		val mockMetadata = mock<Bundle> {
 			on { getString(any()) } doReturn null as String?
@@ -334,6 +452,14 @@ class GenericMusicAppControllerTest {
 		assertTrue(defaultPlaybackPosition.isPaused)
 		assertEquals(0, defaultPlaybackPosition.lastPosition)
 		assertEquals(0, defaultPlaybackPosition.maximumPosition)
+	}
+
+	@Test
+	fun testPlaybackPositionPreservesPlaybackSpeed() {
+		val playbackState = createPlaybackState(PlaybackStateCompat.STATE_PLAYING, 1000, 0)
+		whenever(playbackState.playbackSpeed) doReturn 1.75f
+		whenever(mediaController.playbackState) doReturn playbackState
+		assertEquals(1.75f, controller.getPlaybackPosition().playbackSpeed, 0f)
 	}
 
 	@Test

@@ -9,8 +9,6 @@ import me.hufman.androidautoidrive.music.MusicAppInfo
 import me.hufman.androidautoidrive.music.MusicController
 import me.hufman.androidautoidrive.music.MusicMetadata
 import java.io.IOException
-import kotlin.math.max
-import kotlin.math.min
 
 class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 	val multimediaInfoEvent: RHMIEvent.MultimediaInfoEvent
@@ -21,6 +19,7 @@ class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 	var displayedSong: MusicMetadata? = null
 	var displayedQueue: List<MusicMetadata>? = null
 	var icQueue: List<MusicMetadata> = ArrayList()
+	private var hasPublishedQueue = false
 
 	init {
 		multimediaInfoEvent = app.events.values.filterIsInstance<RHMIEvent.MultimediaInfoEvent>().first()
@@ -31,9 +30,6 @@ class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 	companion object {
 		val QUEUE_SKIPPREVIOUS = MusicMetadata(mediaId = "__QUEUE_SKIPBACK__", title="< ${L.MUSIC_SKIP_PREVIOUS}")
 		val QUEUE_SKIPNEXT = MusicMetadata(mediaId = "__QUEUE_SKIPNEXT__", title="${L.MUSIC_SKIP_NEXT} >")
-
-		const val QUEUE_BACK_COUNT = 15 // how far back to allow scrolling
-		const val QUEUE_NEXT_COUNT = 25 // how far forward to allow scrolling
 	}
 
 	fun initWidgets() {
@@ -62,6 +58,7 @@ class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 			val icQueue = prepareQueue(queue, song)
 			showQueue(icQueue, song)
 			this.icQueue = icQueue
+			hasPublishedQueue = !queue.isNullOrEmpty()
 		}
 
 		displayedApp = app
@@ -90,35 +87,21 @@ class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 	}
 
 	/**
-	 * Decorates a song queue with a Back/Next action around the current song
+	 * Show the complete published queue. Use transport controls only when no queue is exposed.
 	 */
 	fun prepareQueue(songQueue: List<MusicMetadata>?, currentSong: MusicMetadata?): List<MusicMetadata> {
-		val queue = ArrayList<MusicMetadata>(songQueue?.size ?: 0 + 3)
-		val index = songQueue?.indexOfFirst { it.queueId == currentSong?.queueId } ?: -1
-		fun addPrevious(): Unit = if (controller.isSupportedAction(MusicAction.SKIP_TO_PREVIOUS)) { queue.add(QUEUE_SKIPPREVIOUS); Unit } else Unit
-		fun addNext(): Unit = if (controller.isSupportedAction(MusicAction.SKIP_TO_NEXT)) { queue.add(QUEUE_SKIPNEXT); Unit } else Unit
-		if (songQueue != null && currentSong != null && index >= 0) {
-			// add the previous/next actions around the current song
-			// This allows for using the shuffle mode's back/next and also the queue selection
-			queue.addAll(songQueue.subList(max(0, index - QUEUE_BACK_COUNT), index))
-			addPrevious()
-			queue.add(currentSong)
-			addNext()
-			if (index < songQueue.count()) {
-				queue.addAll(songQueue.subList(index + 1, min(songQueue.count(), index + QUEUE_NEXT_COUNT)))
-			}
-		} else {
-			addPrevious()
-			if (currentSong != null) { queue.add(currentSong) }
-			addNext()
-		}
+		if (!songQueue.isNullOrEmpty()) return songQueue.toList()
+		val queue = ArrayList<MusicMetadata>(3)
+		if (controller.isSupportedAction(MusicAction.SKIP_TO_PREVIOUS)) queue.add(QUEUE_SKIPPREVIOUS)
+		if (currentSong != null) queue.add(currentSong)
+		if (controller.isSupportedAction(MusicAction.SKIP_TO_NEXT)) queue.add(QUEUE_SKIPNEXT)
 		return queue
 	}
 
 	private fun showQueue(queue: List<MusicMetadata>, currentSong: MusicMetadata?) {
 		val adapter = object: RHMIModel.RaListModel.RHMIListAdapter<MusicMetadata>(7, queue) {
 			override fun convertRow(index: Int, item: MusicMetadata): Array<Any> {
-				val selected = item.queueId == currentSong?.queueId
+				val selected = item.matchesQueueItem(currentSong) || item === currentSong
 				return arrayOf(
 						index,  // index
 						UnicodeCleaner.clean(item.title ?: ""),   // title
@@ -140,12 +123,12 @@ class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 	}
 
 	private fun onClick(index: Int) {
-		val song = icQueue.getOrNull(index)
+		val song = icQueue.getOrNull(index) ?: return
 		when {
+			hasPublishedQueue -> controller.playQueue(song)
 			song == QUEUE_SKIPPREVIOUS -> controller.skipToPrevious()
 			song == QUEUE_SKIPNEXT -> controller.skipToNext()
 			song == controller.getMetadata() -> controller.seekTo(0)
-			song?.queueId != null -> controller.playQueue(song)
 		}
 	}
 

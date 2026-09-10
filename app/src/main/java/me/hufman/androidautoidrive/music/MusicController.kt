@@ -381,8 +381,9 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 	/** If the current app is playing, make sure the metadata is valid */
 	fun assertPlayingMetadata() = withController { controller ->
 		val appInfo = currentAppInfo
-		// only check every so often, and only when Youtube is the app
-		if (System.currentTimeMillis() > lastConnectTime + RECONNECT_TIMEOUT && appInfo?.packageName == "com.google.android.youtube") {
+		// YouTube variants share the same stale-session behavior after changing videos.
+		if (System.currentTimeMillis() > lastConnectTime + RECONNECT_TIMEOUT && appInfo != null &&
+				appInfo.packageName in MusicAppCompatibility.YOUTUBE_VIDEO_PACKAGES) {
 			val metadata = controller.getMetadata()
 			if (metadata == null) {
 				Log.w(TAG, "Detected NULL metadata for an app, reconnecting")

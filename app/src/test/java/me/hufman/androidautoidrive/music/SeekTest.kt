@@ -6,6 +6,33 @@ import org.junit.Test
 
 class SeekTest {
 	@Test
+	fun rewindKeepsCurrentBookOrVideo() {
+		val packages = listOf(MusicAppCompatibility.AUDIBLE_PACKAGE, MusicAppCompatibility.RUMBLE_PACKAGE) +
+				MusicAppCompatibility.YOUTUBE_VIDEO_PACKAGES
+		packages.forEach { packageName ->
+			val appInfo = mock<MusicAppInfo> { on { this.packageName } doReturn packageName }
+			val musicController = mock<MusicController> {
+				on { currentAppInfo } doReturn appInfo
+				on { getPlaybackPosition() } doReturn PlaybackPosition(true, false, 0, 5000, 60000)
+			}
+			val seeking = SeekingController(mock(), mock(), musicController)
+			seeking.seek(-10000)
+			verify(musicController).seekTo(0)
+			verify(musicController, never()).skipToPrevious()
+		}
+	}
+
+	@Test
+	fun seekDoesNotExceedKnownDuration() {
+		val musicController = mock<MusicController> {
+			on { getPlaybackPosition() } doReturn PlaybackPosition(true, false, 0, 55000, 60000)
+		}
+		val seeking = SeekingController(mock(), mock(), musicController)
+		seeking.seek(10000)
+		verify(musicController).seekTo(60000)
+	}
+
+	@Test
 	fun testHoldSeekForward() {
 		val handler = mock<Handler>()
 		val startPosition: Long = 5000

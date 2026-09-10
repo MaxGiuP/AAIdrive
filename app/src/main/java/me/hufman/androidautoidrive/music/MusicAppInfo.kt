@@ -45,6 +45,10 @@ data class MusicAppInfo(override val name: String, override val icon: Drawable,
 
 		fun guessCategory(packageName: String, label: String): AMCategory {
 			val lowLabel = label.lowercase()
+			// Audiobook/video app labels can contain "podcasts", "live" or "shows".
+			if (packageName in MusicAppCompatibility.SESSION_APP_PACKAGES) {
+				return AMCategory.MULTIMEDIA
+			}
 
 			// any names which are Media, even though they look like radio
 			val MEDIA_NAMES = setOf("librofm")
@@ -90,7 +94,6 @@ data class MusicAppInfo(override val name: String, override val icon: Drawable,
 	override fun hashCode(): Int {
 		var result = name.hashCode()
 		result = 31 * result + packageName.hashCode()
-		result = 31 * result + className.hashCode()
 		return result
 	}
 

@@ -63,10 +63,9 @@ class MusicQueueFragment: Fragment() {
 	}
 
 	fun redraw(metadata: QueueMetadata?) {
-		// The MusicMetadata objects may have their coverart filled in later
-		// so we don't need to clear the list and readd them just to get new coverart
-		// so we can avoid work by not doing this cover if the list is the same
-		if (currentQueueMetadata?.title != metadata?.title || currentQueueMetadata?.songs?.size != metadata?.songs?.size) {
+		// Compare the tracks themselves: switching playlists or reordering a queue can retain
+		// its title and length. The redraw listener handles artwork filled in on existing items.
+		if (currentQueueMetadata?.title != metadata?.title || currentQueueMetadata?.songs != metadata?.songs) {
 			contents.clear()
 			contents.addAll(metadata?.songs?.map {
 				MusicPlayerQueueItem(viewModel, it)

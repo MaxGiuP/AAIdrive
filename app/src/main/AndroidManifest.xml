@@ -38,6 +38,16 @@
         android:protectionLevel="dangerous"/>
 
     <queries>
+        <!-- Session-only players and common patched variants, including Play builds. -->
+        <package android:name="app.revanced.android.apps.youtube.music" />
+        <package android:name="app.rvx.android.apps.youtube.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="app.revanced.android.youtube" />
+        <package android:name="app.rvx.android.youtube" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.vanced.android.youtube" />
+        <package android:name="com.audible.application" />
+        <package android:name="com.rumble.battles" />
         <!-- Search for MediaBrowserService -->
         <intent>
             <action android:name="android.media.browse.MediaBrowserService" />

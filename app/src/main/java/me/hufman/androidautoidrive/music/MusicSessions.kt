@@ -23,7 +23,7 @@ class MusicSessions(val context: Context) {
 		var hasPermission = false
 
 		private fun isControllable(actions: Long): Boolean {
-			return ((actions and ACTION_PLAY) or (actions and ACTION_PAUSE) or (actions and ACTION_PLAY_FROM_SEARCH)) > 0
+			return actions and (ACTION_PLAY or ACTION_PAUSE or ACTION_PLAY_PAUSE or ACTION_PLAY_FROM_SEARCH) > 0
 		}
 	}
 

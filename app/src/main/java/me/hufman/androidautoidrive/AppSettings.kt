@@ -57,7 +57,7 @@ interface AppSettings {
 		AUDIO_FORCE_CONTEXT("Audio_Force_Context", "false", "Force audio context"),
 		AUDIO_DESIRED_APP("Audio_Desired_App", "", "Last music app that was playing"),
 		SHOW_ADVANCED_SETTINGS("Advanced_Settings", "false", "Show advanced settings"),
-		HIDDEN_MUSIC_APPS("Hidden_Music_Apps", "com.android.bluetooth,com.clearchannel.iheartradio.connect,com.google.android.googlequicksearchbox,com.google.android.youtube,com.vanced.android.youtube", "List of music apps to hide from the app list"),
+		HIDDEN_MUSIC_APPS("Hidden_Music_Apps", "com.android.bluetooth,com.clearchannel.iheartradio.connect,com.google.android.googlequicksearchbox", "List of music apps to hide from the app list"),
 		FORCE_SPOTIFY_LAYOUT("Force_Spotify_Layout", "false", "Use Spotify UI Resources"),
 		FORCE_AUDIOPLAYER_LAYOUT("Force_Audioplayer_Layout", "false", "Use legacy music screen even with Spotify resources"),
 		CONNECTION_PROBE_IPS("Connection_Probe_IPs", "", "Extra IP(s) to test while probe for the car"),

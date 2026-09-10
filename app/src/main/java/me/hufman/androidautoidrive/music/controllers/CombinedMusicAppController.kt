@@ -1,6 +1,7 @@
 package me.hufman.androidautoidrive.music.controllers
 
 import android.os.DeadObjectException
+import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
 import kotlinx.coroutines.*
 import me.hufman.androidautoidrive.MutableObservable
@@ -124,8 +125,13 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 
 	override fun pause() {
 		// definitely make sure we pause, don't check for supported action
+		val pausedSessions = HashSet<MediaSessionCompat.Token>()
 		for (pendingController in controllers) {
-			pendingController.value?.pause()
+			val controller = pendingController.value ?: continue
+			// Browser and notification access can expose the same session. Sending a
+			// play/pause toggle twice would resume it before its state callback arrives.
+			val token = (controller as? GenericMusicAppController)?.mediaController?.sessionToken
+			if (token == null || pausedSessions.add(token)) controller.pause()
 		}
 	}
 

@@ -72,14 +72,21 @@ class SeekingController(val context: Context, val handler: Handler, val controll
 	}
 
 	fun seek(delta: Int) {
-		val curPos = controller.getPlaybackPosition().getPosition()
+		val position = controller.getPlaybackPosition()
+		val curPos = position.getPosition()
 		val newPos = curPos + delta
-		// handle seeking past beginning of song
+		val packageName = controller.currentAppInfo?.packageName
+		val keepCurrentItem = packageName == MusicAppCompatibility.AUDIBLE_PACKAGE ||
+				packageName == MusicAppCompatibility.RUMBLE_PACKAGE ||
+				packageName in MusicAppCompatibility.YOUTUBE_VIDEO_PACKAGES
+		// Rewinding a book or video should stay in the current chapter/video.
 		if (newPos < 0) {
-			controller.skipToPrevious()
-			startedSeekingTime = 0  // cancel seeking, because skipToPrevious starts at the beginning of the previous song
+			if (keepCurrentItem) controller.seekTo(0) else controller.skipToPrevious()
+			startedSeekingTime = 0
 		} else {
-			controller.seekTo(newPos)
+			val maximum = position.maximumPosition
+			controller.seekTo(if (maximum > 0) newPos.coerceAtMost(maximum) else newPos)
+			if (maximum > 0 && newPos >= maximum) startedSeekingTime = 0
 		}
 	}
 }

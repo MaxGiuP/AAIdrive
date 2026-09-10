@@ -172,7 +172,7 @@ class MusicPlayerBrowseItem(val musicActivityIconsModel: MusicActivityIconsModel
 
 class MusicPlayerQueueItem(val musicActivityModel: MusicActivityModel, override val musicMetadata: MusicMetadata): MusicPlayerItem {
 	val nowPlaying: Boolean
-		get() = musicMetadata.queueId == musicActivityModel.musicController.getMetadata()?.queueId && !musicActivityModel.musicController.getPlaybackPosition().isPaused
+		get() = musicMetadata.matchesQueueItem(musicActivityModel.musicController.getMetadata()) && !musicActivityModel.musicController.getPlaybackPosition().isPaused
 	override val icon: Bitmap?
 		get() = null
 	override val coverart: Bitmap?

@@ -6,6 +6,7 @@ import me.hufman.androidautoidrive.music.*
 import me.hufman.androidautoidrive.music.controllers.SpotifyAppController
 import me.hufman.androidautoidrive.music.spotify.SpotifyWebApi
 import me.hufman.androidautoidrive.phoneui.viewmodels.MusicActivityModel
+import me.hufman.androidautoidrive.phoneui.viewmodels.MusicPlayerQueueItem
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -51,6 +52,16 @@ class MusicActivityModelTest {
 		whenever(musicController.getQueue()) doReturn queue
 		viewModel.update()
 		assertEquals(queue, viewModel.queueMetadata.value)
+	}
+
+	@Test
+	fun queueHighlightRequiresMatchingSong() {
+		val item = MusicPlayerQueueItem(viewModel, MusicMetadata(mediaId = "track"))
+		assertFalse(item.nowPlaying)
+		whenever(musicController.getMetadata()) doReturn MusicMetadata(mediaId = "track")
+		assertTrue(item.nowPlaying)
+		whenever(musicController.getMetadata()) doReturn MusicMetadata(mediaId = "other-track")
+		assertFalse(item.nowPlaying)
 	}
 
 	@Test

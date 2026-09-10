@@ -23,6 +23,7 @@ import me.hufman.androidautoidrive.cds.CDSEventHandler
 import me.hufman.androidautoidrive.cds.onPropertyChangedEvent
 import me.hufman.androidautoidrive.cds.subscriptions
 import me.hufman.androidautoidrive.music.MusicAppDiscovery
+import me.hufman.androidautoidrive.music.MusicAppCompatibility
 import me.hufman.androidautoidrive.music.MusicAppInfo
 import me.hufman.androidautoidrive.music.MusicController
 import me.hufman.androidautoidrive.utils.GraphicsHelpers
@@ -132,11 +133,14 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 				musicController.connectAppAutomatically(discoveredApp)
 			}
 
-			// connect to the previous app, if we aren't currently connected
+			// Restore the previous app, or prefer YouTube Music on a fresh setup.
 			if (musicController.currentAppController == null) {
 				val appInfo = musicController.currentAppInfo ?: nowPlaying ?:
 					musicController.loadDesiredApp().let { appName ->
 						musicAppDiscovery.validApps.firstOrNull { it.packageName == appName }
+							?: if (appName.isNullOrBlank()) {
+								MusicAppCompatibility.preferredMusicApp(musicAppDiscovery.allApps)
+							} else null
 					}
 				if (appInfo != null) {
 					musicController.connectAppAutomatically(appInfo)

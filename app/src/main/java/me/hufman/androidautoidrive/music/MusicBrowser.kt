@@ -79,6 +79,12 @@ class MusicBrowser(val handler: Handler, val mediaBrowser: MediaBrowserCompat, v
 
 	private fun getRoot(): String {
 		if (!connected) return "disconnected root"
+		if (musicAppInfo.packageName in MusicAppCompatibility.YOUTUBE_MUSIC_PACKAGES &&
+				musicAppInfo.packageName != "com.google.android.apps.youtube.music") {
+			// Renamed variants share YouTube Music's Android Auto browse service and root.
+			// The original package keeps the root negotiated with its service below.
+			return "com.google.android.projection.gearhead"
+		}
 		return when (musicAppInfo.packageName) {
 			"com.spotify.music" -> "com.google.android.projection.gearhead---spotify_media_browser_root_android_auto"   // the Android Auto root for Spotify
 			"com.apple.android.music" -> "__AUTO_ROOT__"     // Apple Music
@@ -104,7 +110,6 @@ class MusicBrowser(val handler: Handler, val mediaBrowser: MediaBrowserCompat, v
 			"com.tbig.playerpro" -> "__ROOT__"    // PlayerPro
 			"com.amazon.mp3" -> "BROWSER_ROOT"      // Amazon Music, except it sends a null root first
 			"com.qobuz.music" -> "QOBUZ_MEDIA_ROOT"     // Qobuz
-			"app.revanced.android.apps.youtube.music" -> "com.google.android.projection.gearhead"
 			else -> return when(musicAppInfo.className) {   // some apps have a shared service library
 				"com.itmwpb.vanilla.radioapp.player.MusicService" -> "/"    // OneCMS (HOT97 Official)
 				"com.example.android.uamp.media.MusicService" -> "/"        // UAMP Example player (Radio Bob)

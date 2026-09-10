@@ -1,14 +1,75 @@
 package me.hufman.androidautoidrive.music
 
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
+import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import org.mockito.kotlin.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MusicMetadataTest {
 	val fakeBundle = mock<Bundle> {
 		on {keySet()} doReturn emptySet()
+	}
+
+	@Test
+	fun testQueueItemPreservesPlaybackIdAndArtwork() {
+		val artwork = mock<Bitmap>()
+		val artworkUri = mock<Uri> {
+			on { toString() } doReturn "content://music/cover"
+		}
+		val descriptionValue = mock<MediaDescriptionCompat> {
+			on { mediaId } doReturn "playlist/track-17"
+			on { title } doReturn "Track 17"
+			on { iconBitmap } doReturn artwork
+			on { iconUri } doReturn artworkUri
+			on { extras } doReturn fakeBundle
+		}
+		val item = mock<MediaSessionCompat.QueueItem> {
+			on { queueId } doReturn 17L
+			on { description } doReturn descriptionValue
+		}
+		val parsed = MusicMetadata.fromQueueItem(item)
+		assertEquals("playlist/track-17", parsed.mediaId)
+		assertEquals(17L, parsed.queueId)
+		assertEquals("Track 17", parsed.title)
+		assertSame(artwork, parsed.coverArt)
+		assertSame(artwork, parsed.icon)
+		assertEquals("content://music/cover", parsed.coverArtUri)
+		assertSame(fakeBundle, parsed.extras)
+		assertTrue(parsed.playable)
+	}
+
+	@Test
+	fun testUnknownActiveQueueIdIsAbsent() {
+		val metadata = mock<MediaMetadataCompat> {
+			on { bundle } doReturn fakeBundle
+		}
+		val playbackState = mock<PlaybackStateCompat> {
+			on { activeQueueItemId } doReturn MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()
+		}
+		assertNull(MusicMetadata.fromMediaMetadata(metadata, playbackState).queueId)
+	}
+
+	@Test
+	fun testQueueMatchingFallsBackToMediaIdButPreservesRepeatedSongs() {
+		val song = MusicMetadata(mediaId = "track", queueId = 10)
+		assertTrue(song.matchesQueueItem(MusicMetadata(mediaId = "track")))
+		assertTrue(song.matchesQueueItem(MusicMetadata(mediaId = "track", queueId = MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong())))
+		assertTrue(song.matchesQueueItem(MusicMetadata(queueId = 10)))
+		assertFalse(song.matchesQueueItem(MusicMetadata(mediaId = "track", queueId = 11)))
+		assertFalse(song.matchesQueueItem(MusicMetadata(mediaId = "different")))
+		assertFalse(song.matchesQueueItem(null))
+		assertFalse(MusicMetadata().matchesQueueItem(MusicMetadata()))
+		assertFalse(MusicMetadata(mediaId = "").matchesQueueItem(MusicMetadata(mediaId = "")))
 	}
 
 	/**

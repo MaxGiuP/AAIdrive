@@ -9,8 +9,9 @@ import me.hufman.androidautoidrive.carapp.L
 
 open class CustomAction(val packageName: String, val action: String, val name: String, private val _iconId: Int, val icon: Drawable?, val extras: Bundle?, val providesAction: MusicAction?) {
 	companion object {
-		val matchSkipPreviousAction = Regex("(skip|seek|jump).{0,5}(back|previous)", RegexOption.IGNORE_CASE)
-		val matchSkipNextAction = Regex("(skip|seek|jump).{0,5}(forward|fwd|next)", RegexOption.IGNORE_CASE)
+		private const val SEEK_AMOUNT = "(?:[_ -]*[0-9]+(?:[_ -]*seconds?)?)?"
+		val matchSkipPreviousAction = Regex("(?:(?:skip|seek|jump)(?:[_ -]*to)?$SEEK_AMOUNT[_ -]*(?:back(?:ward)?|previous)$SEEK_AMOUNT|rewind)", RegexOption.IGNORE_CASE)
+		val matchSkipNextAction = Regex("(?:(?:skip|seek|jump)(?:[_ -]*to)?$SEEK_AMOUNT[_ -]*(?:forward|fwd|next)$SEEK_AMOUNT|fast[_ -]*forward)", RegexOption.IGNORE_CASE)
 
 		fun fromMediaCustomAction(context: Context, packageName: String, action: PlaybackStateCompat.CustomAction): CustomAction {
 			val icon = try {
@@ -87,10 +88,12 @@ open class CustomAction(val packageName: String, val action: String, val name: S
 		 * Such as PocketCasts providing custom jumpBack actions
 		 */
 		fun enableProvidesAction(action: CustomAction): CustomAction {
-			if (matchSkipPreviousAction.matches(action.action)) {
+			// Spoken-audio apps may qualify their action IDs or include a seek interval.
+			val actionName = action.action.substringAfterLast('.')
+			if (matchSkipPreviousAction.matches(actionName)) {
 				return action.clone(providesAction = MusicAction.SKIP_TO_PREVIOUS)
 			}
-			if (matchSkipNextAction.matches(action.action)) {
+			if (matchSkipNextAction.matches(actionName)) {
 				return action.clone(providesAction = MusicAction.SKIP_TO_NEXT)
 			}
 			return action
@@ -101,7 +104,9 @@ open class CustomAction(val packageName: String, val action: String, val name: S
 		 * Such as Jump Back a certain time, or Change Playback Speed
 		 */
 		fun enableDwellAction(action: CustomAction): CustomAction {
-			val isSkipAction = action.action.contains("jump", true) ||      // jumpBack
+			val isSkipAction = action.providesAction == MusicAction.SKIP_TO_PREVIOUS ||
+					action.providesAction == MusicAction.SKIP_TO_NEXT ||
+					action.action.contains("jump", true) ||      // jumpBack
 					action.action.contains("skip", true) ||
 					action.action.contains("seek", true)
 			val isChangeAction = action.action.contains("change", true)       // change speed, perhaps
