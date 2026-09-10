@@ -1,0 +1,16 @@
+{
+  "file": "AAIdrive-MaxGiuP.apk",
+  "application_id": "me.hufman.androidautoidrive",
+  "variant": "nomapNonalyticsFullDebug",
+  "version_name": "1.4.4-2-0f92c94",
+  "version_code": 10404001,
+  "source_commit": "0f92c9471263ddd94402d74a3a761a0af63cb1cf",
+  "size_bytes": 21291308,
+  "sha256": "fdcb10fc65606a3bdf8fcddfa748fe62315d005875a04e1b74844871f05ef765",
+  "signing": "Android development/debug key; APK v1 and v2 verified",
+  "unit_tests": {
+    "total": 531,
+    "failed": 0
+  },
+  "phone_and_car_tested": false
+}

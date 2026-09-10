@@ -2,6 +2,12 @@
 
 [Download AAIdrive-MaxGiuP.apk](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-MaxGiuP.apk)
 
+Version: `1.4.4-2-0f92c94` (21.3 MB). Built from
+[`0f92c947`](https://github.com/MaxGiuP/AAIdrive/commit/0f92c947).
+The final build passed all 531 unit tests; APK v1/v2 signatures were verified.
+Full version, source, and checksum details are in [build-info.json](build-info.json).
+Phone and in-car testing have not been performed.
+
 This is the `nomapNonalyticsFullDebug` build: no embedded maps or analytics, with
 normal Android media integration enabled. Spotify's optional proprietary API
 integration is disabled because this fork has no Spotify API key.
