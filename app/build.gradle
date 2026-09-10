@@ -52,7 +52,7 @@ android {
         minSdkVersion 23
         targetSdkVersion 35
         multiDexEnabled false
-        versionCode androidGitVersion.code() + 1
+        versionCode project.findProperty('AAIdrive_ForkVersionCode')?.toInteger() ?: androidGitVersion.code() + 1
         versionName androidGitVersion.name()
 //        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunner 'me.hufman.androidautoidrive.DexOpenerAndroidJUnitRunner'
@@ -125,6 +125,13 @@ android {
             pseudoLocalesEnabled true
             enableUnitTestCoverage false
             enableAndroidTestCoverage false
+        }
+        optimized {
+            // Ship the fork with upstream's R8 settings and no debugger overhead.
+            // Reuse the local development certificate so it updates the first fork APK.
+            initWith release
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.debug
         }
     }
     bundle {
