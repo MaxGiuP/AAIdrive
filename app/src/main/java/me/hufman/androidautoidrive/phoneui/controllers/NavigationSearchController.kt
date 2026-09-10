@@ -12,11 +12,13 @@ import me.hufman.androidautoidrive.maps.MapPlaceSearch
 import me.hufman.androidautoidrive.maps.MapResult
 import me.hufman.androidautoidrive.phoneui.viewmodels.NavigationStatusModel
 import java.net.URLEncoder
+import java.util.concurrent.atomic.AtomicBoolean
 
 class NavigationSearchController(val scope: CoroutineScope, val parser: NavigationParser, val mapPlaceSearch: MapPlaceSearch,
                                  val navigationTrigger: NavigationTrigger, val navigationStatusModel: NavigationStatusModel,
                                  val dispatchers: DispatcherProvider = DefaultDispatcherProvider()) {
 	var job: Job? = null
+	enum class NavigationOutcome { CONFIRMED, SENT, FAILED }
 
 	companion object {
 		const val TRIES = 3
@@ -107,14 +109,15 @@ class NavigationSearchController(val scope: CoroutineScope, val parser: Navigati
 			navigationStatusModel.searchStatus.value = { getString(R.string.lbl_navigation_listener_pending) }
 
 			// trigger navigation with the discovered result
-			triggerNavigation(result)
+			currentCoroutineContext().ensureActive()
+			val outcome = triggerNavigation(result)
 
 			// update the result label
-			if (navigationStatusModel.isCarNavigating.value == true ||
-					navigationStatusModel.isCustomNaviSupportedAndPreferred.value == true) {
-				navigationStatusModel.searchStatus.value = { getString(R.string.lbl_navigation_listener_success) }
-			} else {
-				navigationStatusModel.searchStatus.value = { getString(R.string.lbl_navigation_listener_unsuccess) }
+			navigationStatusModel.searchFailed.value = outcome == NavigationOutcome.FAILED
+			navigationStatusModel.searchStatus.value = when (outcome) {
+				NavigationOutcome.CONFIRMED -> { { getString(R.string.lbl_navigation_listener_success) } }
+				NavigationOutcome.SENT -> { { getString(R.string.lbl_navigation_listener_sent) } }
+				NavigationOutcome.FAILED -> { { getString(R.string.lbl_navigation_listener_unsuccess) } }
 			}
 		}
 	}
@@ -130,41 +133,50 @@ class NavigationSearchController(val scope: CoroutineScope, val parser: Navigati
 				?: "geo:0,0?q=${URLEncoder.encode(trimmedQuery, "UTF-8")}"
 		}
 
-		val result = withContext(dispatchers.IO) {
-			parser.parseUrl(url.toString()) ?:
-			parser.parseUrl(url.toString()) // try a second time
+		return withContext(dispatchers.IO) {
+			currentCoroutineContext().ensureActive()
+			parser.parseUrl(url)
 		}
-		return result
 	}
 
-	suspend fun triggerNavigation(destination: Address) {
-		val observer = Observer<Boolean> {}
+	suspend fun triggerNavigation(destination: Address): NavigationOutcome = withContext(dispatchers.Main) {
+		val acknowledgement = CompletableDeferred<Unit>()
+		val sent = AtomicBoolean(false)
+		var sawInactiveGuidance = false
+		val observer = Observer<Boolean> { navigating ->
+			if (sent.get()) {
+				if (navigating != true) sawInactiveGuidance = true
+				else if (sawInactiveGuidance) acknowledgement.complete(Unit)
+			}
+		}
 		try {
-			// register for navigation status
+			// Subscribe before dispatch so an immediate car response cannot be missed.
 			navigationStatusModel.isCarNavigating.observeForever(observer)
-			navigationStatusModel.isCustomNaviSupportedAndPreferred.observeForever(observer)
-			// try a few times
+			val alreadyNavigating = navigationStatusModel.isCarNavigating.value == true
+			sawInactiveGuidance = !alreadyNavigating
+			val customNavigation = navigationStatusModel.isCustomNaviSupported.value == true &&
+					navigationStatusModel.isCustomNaviPreferred.value == true
 			for (i in 0 until TRIES) {
+				currentCoroutineContext().ensureActive()
+				if (acknowledgement.isCompleted) return@withContext NavigationOutcome.CONFIRMED
 				withContext(dispatchers.IO) {
+					currentCoroutineContext().ensureActive()
+					sent.set(true)
 					navigationTrigger.triggerNavigation(destination)
 				}
-				for (t in 0 until TIMEOUT / 1000) {
-					delay(1000)
-					// wait up to TIMEOUT or until car begins navigation
-					if (navigationStatusModel.isCarNavigating.value == true ||
-							navigationStatusModel.isCustomNaviSupportedAndPreferred.value == true) {
-						break
-					}
-				}
-				// if the car is navigating, don't try again
-				if (navigationStatusModel.isCarNavigating.value == true ||
-						navigationStatusModel.isCustomNaviSupportedAndPreferred.value == true) {
-					break
+				if (customNavigation) return@withContext NavigationOutcome.CONFIRMED
+				if (acknowledgement.isCompleted) return@withContext NavigationOutcome.CONFIRMED
+				// An existing route's active flag cannot confirm a replacement destination.
+				// Send it once and let the driver check the car, rather than resetting guidance.
+				if (alreadyNavigating) return@withContext NavigationOutcome.SENT
+				if (withTimeoutOrNull(TIMEOUT) { acknowledgement.await(); true } == true) {
+					return@withContext NavigationOutcome.CONFIRMED
 				}
 			}
+			NavigationOutcome.FAILED
 		} finally {
+			acknowledgement.cancel()
 			navigationStatusModel.isCarNavigating.removeObserver(observer)
-			navigationStatusModel.isCustomNaviSupportedAndPreferred.removeObserver(observer)
 		}
 	}
 }

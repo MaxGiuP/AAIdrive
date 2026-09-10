@@ -29,6 +29,13 @@
         <View style="@style/Divider"
             android:layout_marginBottom="@dimen/pane_vertical_margin"/>
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/pane_vertical_margin"
+            android:visibility="@{!viewModel.isCustomNaviSupportedAndPreferred()}"
+            android:text="@string/lbl_navigation_native_route" />
+
         <LinearLayout
             android:orientation="vertical" android:layout_width="match_parent"
             android:layout_height="match_parent"

@@ -32,6 +32,7 @@
     <string name="lbl_navigation_listener_parsefailure">Could not locate destination</string>
     <string name="lbl_navigation_listener_pending">Starting navigation</string>
     <string name="lbl_navigation_listener_success">Success</string>
+    <string name="lbl_navigation_listener_sent">Destination sent; check the destination in your car</string>
     <string name="lbl_navigation_listener_unsuccess">Unsuccessful</string>
 
     <!-- Welcome pages -->
@@ -155,6 +156,7 @@
     <string name="lbl_navigationstatus_active">Currently navigating to</string>
     <string name="lbl_navigationstatus_inactive">Not currently navigating</string>
     <string name="lbl_navigation_prefer_custom">Prefer custom map navigation</string>
+    <string name="lbl_navigation_native_route">BMW/MINI calculates its own route to the destination. Google Maps routes and intermediate stops are not transferred.</string>
 
     <string name="lbl_addonspage">Additional apps can work with your car to add even more functionality</string>
     <string name="lbl_addon_apps">Addon Apps</string>

@@ -18,6 +18,7 @@ class NavigationParserJvmTest {
 	private val redirector = mock<URLRedirector>()
 	private val parser = NavigationParser(searcher, redirector)
 	private lateinit var addresses: MockedConstruction<Address>
+	private val encodedRoute = "!4m14!4m13!1m5!1m1!1sorigin!2m2!1d11!2d12!1m5!1m1!1sdestination!2m2!1d-0.12!2d51.5!3e0"
 
 	@Before
 	fun androidAddressValueObjects() {
@@ -81,6 +82,74 @@ class NavigationParserJvmTest {
 		assertLocation("https://www.google.com/maps/dir/1,2/3,4/51.5,-0.12/@8,9,10z/data=!4m2", 51.5, -0.12)
 		assertLocation("https://www.google.com/maps/dir//51.5,-0.12/", 51.5, -0.12)
 		assertNull(parser.parseUrl("https://www.google.com/maps/dir/51.5,-0.12/"))
+	}
+
+	@Test
+	fun namedDirectionsUseTheFinalStopCoordinatesWithoutGeocoding() {
+		listOf(
+			"https://www.google.com/maps/dir/Origin/A+Museum/@8,9,10z/data=$encodedRoute",
+			"https://www.google.com/maps/dir/Origin/A+Museum/@8,9,10z/data=${encodedRoute.replace("!", "%21")}",
+			"https://www.google.com/maps/dir/Origin/A+Museum/?data=$encodedRoute",
+			// A pin outside the route container must not replace the destination.
+			"https://www.google.com/maps/dir/Origin/A+Museum/data=$encodedRoute!8m2!3d3!4d4"
+		).forEach { assertLocation(it, 51.5, -0.12, "A Museum") }
+		verifyNoInteractions(searcher, redirector)
+	}
+
+	@Test
+	fun realSharedDirectionsLinkUsesDestinationNotOriginOrCamera() {
+		// Public Google-generated share URL, including the actual !m token counts and place IDs.
+		val link = "https://www.google.com/maps/dir/Guernsey+Airport+(GCI),+La+Villiaze,+Guernsey/" +
+			"National+Trust+of+Guernsey+-+Les+Caches+Farm,+Forest,+Guernsey/@49.4334763,-2.6063781,15.68z/" +
+			"data=!4m14!4m13!1m5!1m1!1s0x480d715f1f23553b:0x438875c8ea3fad2!2m2!1d-2.5994887!2d49.434081" +
+			"!1m5!1m1!1s0x480d73fd0b24e967:0x8aaee2e39c06cd3!2m2!1d-2.5975703!2d49.4259594!3e2?entry=ttu"
+		assertLocation(link, 49.4259594, -2.5975703, "National Trust of Guernsey - Les Caches Farm, Forest, Guernsey")
+		verifyNoInteractions(searcher, redirector)
+	}
+
+	@Test
+	fun encodedDestinationSupportsBlankOriginWaypointsAndPlacePinBlocks() {
+		val blankOrigin = "!4m9!4m8!1m0!1m5!1m1!1sdestination!2m2!1d-0.12!2d51.5!3e0"
+		assertLocation("https://www.google.com/maps/dir//A+Museum/data=$blankOrigin", 51.5, -0.12, "A Museum")
+		val waypointRoute = "!4m20!4m19!1m5!1m1!1sorigin!2m2!1d11!2d12" +
+			"!1m5!1m1!1swaypoint!2m2!1d13!2d14!1m5!1m1!1sdestination!2m2!1d-0.12!2d51.5!3e0"
+		assertLocation("https://www.google.com/maps/dir/Origin/Waypoint/A+Museum/data=$waypointRoute", 51.5, -0.12, "A Museum")
+		val pinRoute = encodedRoute.replace("!2m2!1d-0.12!2d51.5", "!8m2!3d51.5!4d-0.12")
+		assertLocation("https://www.google.com/maps/dir/Origin/A+Museum/data=$pinRoute", 51.5, -0.12, "A Museum")
+		verifyNoInteractions(searcher, redirector)
+	}
+
+	@Test
+	fun explicitDestinationCoordinatesAndQueryParametersOutrankEncodedData() {
+		assertLocation("https://www.google.com/maps/dir/Origin/40,50/data=$encodedRoute", 40.0, 50.0)
+		assertLocation("https://www.google.com/maps/dir/Origin/849VQJQ5+XX/data=$encodedRoute", 37.7899375, -122.3900625)
+		assertLocation("https://www.google.com/maps/dir/Origin/A+Museum/data=$encodedRoute?destination=40,50", 40.0, 50.0)
+		assertLocation("https://www.google.com/maps/dir/Origin/A+Museum/data=$encodedRoute?daddr=40,50", 40.0, 50.0)
+		assertNull(parser.parseUrl("https://www.google.com/maps/dir/Origin/95,50/data=$encodedRoute"))
+		verifyNoInteractions(searcher, redirector)
+		val explicitlyNamed = mock<Address>()
+		whenever(searcher.search("Explicit destination")).thenReturn(explicitlyNamed)
+		assertSame(explicitlyNamed, parser.parseUrl("https://www.google.com/maps/dir/Origin/A+Museum/data=$encodedRoute?destination=Explicit+destination"))
+		verify(searcher).search("Explicit destination")
+	}
+
+	@Test
+	fun ambiguousIncompleteAndMalformedRouteDataFallsBackToTheDestinationName() {
+		val found = mock<Address>()
+		whenever(searcher.search("A Museum")).thenReturn(found)
+		val missingDestinationCoordinates = "!4m9!4m8!1m5!1m1!1sorigin!2m2!1d11!2d12!1m0!3e0"
+		val nestedShapingCoordinates = "!4m8!4m7!1m0!1m4!3m3!1m2!1d7!2d8!3e0"
+		listOf(
+			"https://www.google.com/maps/dir/Origin/Waypoint/A+Museum/data=$encodedRoute",
+			"https://www.google.com/maps/dir/Origin/A+Museum/data=$missingDestinationCoordinates",
+			"https://www.google.com/maps/dir/Origin/A+Museum/data=$nestedShapingCoordinates",
+			"https://www.google.com/maps/dir/Origin/A+Museum/data=$encodedRoute$encodedRoute",
+			"https://www.google.com/maps/dir/Origin/A+Museum/data=!4m999!1m0",
+			"https://www.google.com/maps/dir/Origin/A+Museum/data=${encodedRoute.replace("!2d51.5", "!2d95")}",
+			"https://www.google.com/maps/dir/Origin/A+Museum/@1,2,3z/data=!3d51.5!4d-0.12"
+		).forEach { assertSame(it, found, parser.parseUrl(it)) }
+		verify(searcher, times(7)).search("A Museum")
+		verifyNoInteractions(redirector)
 	}
 
 	@Test

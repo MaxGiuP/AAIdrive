@@ -8,9 +8,12 @@ import com.google.gson.JsonObject
 import org.mockito.kotlin.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runBlockingTest
 import me.hufman.androidautoidrive.CarInformation
 import me.hufman.androidautoidrive.CoroutineTestRule
+import me.hufman.androidautoidrive.DispatcherProvider
 import me.hufman.androidautoidrive.R
 import me.hufman.androidautoidrive.carapp.navigation.NavigationParser
 import me.hufman.androidautoidrive.carapp.navigation.NavigationTrigger
@@ -22,6 +25,8 @@ import kotlinx.coroutines.test.advanceTimeBy
 import me.hufman.androidautoidrive.maps.MapPlaceSearch
 import me.hufman.androidautoidrive.maps.MapResult
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -68,7 +73,7 @@ class NavigationSearchControllerTest {
 		}
 		model.query.value = "test address"
 		controller.startNavigation()
-		verify(parser, times(2)).parseUrl("geo:0,0?q=test+address")
+		verify(parser).parseUrl("geo:0,0?q=test+address")
 
 		// show an error
 		assertEquals(false, model.isSearching.value)
@@ -88,8 +93,7 @@ class NavigationSearchControllerTest {
 		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
 		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
 
-		// it should retry parseUrl once if the first result is null
-		whenever(parser.parseUrl(any())) doReturnConsecutively listOf(null, testAddress)
+		whenever(parser.parseUrl(any())) doReturn testAddress
 		controller.startNavigation("test address")
 
 		// should now be trying to send to the car
@@ -110,8 +114,10 @@ class NavigationSearchControllerTest {
 		testScheduler.apply { advanceTimeBy(NavigationSearchController.TIMEOUT / 2); runCurrent() }
 		cdsData.onPropertyChangedEvent(CDS.NAVIGATION.GUIDANCESTATUS, JsonObject().apply { addProperty("guidanceStatus", 1) })
 
-		// wait up to 1000ms for the poll loop
-		testScheduler.apply { advanceTimeBy(1000); runCurrent() }
+		// The status event wakes the request without a polling interval.
+		val acknowledgementTime = testScheduler.currentTime
+		testScheduler.runCurrent()
+		assertEquals(acknowledgementTime, testScheduler.currentTime)
 
 		// UI should update with success
 		assertEquals(false, model.isSearching.value)
@@ -130,8 +136,7 @@ class NavigationSearchControllerTest {
 		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
 		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
 
-		// it should retry parseUrl once if the first result is null
-		whenever(parser.parseUrl(any())) doReturnConsecutively  listOf(null, testAddress)
+		whenever(parser.parseUrl(any())) doReturn testAddress
 		controller.startNavigation("test address")
 
 		// should now be trying to send to the car
@@ -174,7 +179,7 @@ class NavigationSearchControllerTest {
 		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
 		whenever(searcher.resultInformationAsync("place")).thenReturn(CompletableDeferred(MapResult("place", "Museum", "Resolved address")))
 		controller.startNavigation(MapResult("place", "Museum"))
-		verify(parser, times(2)).parseUrl("geo:0,0?q=Resolved+address")
+		verify(parser).parseUrl("geo:0,0?q=Resolved+address")
 		assertEquals(false, model.isSearching.value)
 	}
 
@@ -219,7 +224,81 @@ class NavigationSearchControllerTest {
 		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
 		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
 		controller.startNavigation("Museum\nhttps://maps.app.goo.gl/example\nShared place")
-		verify(parser, times(2)).parseUrl("https://maps.app.goo.gl/example")
+		verify(parser).parseUrl("https://maps.app.goo.gl/example")
+	}
+
+	@Test
+	fun alreadyActiveGuidanceSendsOnceWithoutClaimingNewDestinationWasConfirmed() = coroutineTestRule.testDispatcher.runBlockingTest {
+		cdsData.onPropertyChangedEvent(CDS.NAVIGATION.GUIDANCESTATUS, JsonObject().apply { addProperty("guidanceStatus", 1) })
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(parser.parseUrl(any())) doReturn testAddress
+		val startTime = testScheduler.currentTime
+		controller.startNavigation("replacement destination")
+		assertEquals(startTime, testScheduler.currentTime)
+		assertEquals(false, model.isSearching.value)
+		context.run(model.searchStatus.value!!)
+		verify(context).getString(R.string.lbl_navigation_listener_sent)
+		verify(context, never()).getString(R.string.lbl_navigation_listener_success)
+		assertFalse(model.isCarNavigating.hasObservers())
+		testScheduler.advanceUntilIdle()
+		verify(navigationTrigger, times(1)).triggerNavigation(testAddress)
+	}
+
+	@Test
+	fun synchronousGuidanceResponseIsNotMissedAndRemovesObserver() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(navigationTrigger.triggerNavigation(testAddress)) doAnswer {
+			cdsData.onPropertyChangedEvent(CDS.NAVIGATION.GUIDANCESTATUS, JsonObject().apply { addProperty("guidanceStatus", 1) })
+		}
+		val startTime = testScheduler.currentTime
+		assertEquals(NavigationSearchController.NavigationOutcome.CONFIRMED, controller.triggerNavigation(testAddress))
+		assertEquals(startTime, testScheduler.currentTime)
+		assertFalse(model.isCarNavigating.hasObservers())
+		verify(navigationTrigger, times(1)).triggerNavigation(testAddress)
+	}
+
+	@Test
+	fun cancellingPendingAcknowledgementRemovesObserverAndStopsRetries() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(parser.parseUrl(any())) doReturn testAddress
+		controller.startNavigation("destination")
+		assertTrue(model.isCarNavigating.hasObservers())
+		controller.job!!.cancel()
+		testScheduler.runCurrent()
+		assertFalse(model.isCarNavigating.hasObservers())
+		assertEquals(false, model.isSearching.value)
+		testScheduler.advanceUntilIdle()
+		verify(navigationTrigger, times(1)).triggerNavigation(testAddress)
+	}
+
+	@Test
+	fun cancellationBeforeQueuedDispatchDoesNotSendObsoleteDestination() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val queuedIo = StandardTestDispatcher(testScheduler)
+		val dispatchers = object : DispatcherProvider by coroutineTestRule.testDispatcherProvider {
+			override val IO = queuedIo
+		}
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, dispatchers)
+		val request = launch { controller.triggerNavigation(testAddress) }
+		assertTrue(model.isCarNavigating.hasObservers())
+		request.cancel()
+		testScheduler.runCurrent()
+		assertFalse(model.isCarNavigating.hasObservers())
+		verifyNoInteractions(navigationTrigger)
+	}
+
+	@Test
+	fun customNavigationHandoffDoesNotWaitForNativeGuidance() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(true), MutableLiveData(true), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		val startTime = testScheduler.currentTime
+		assertEquals(NavigationSearchController.NavigationOutcome.CONFIRMED, controller.triggerNavigation(testAddress))
+		assertEquals(startTime, testScheduler.currentTime)
+		assertFalse(model.isCarNavigating.hasObservers())
+		verify(navigationTrigger, times(1)).triggerNavigation(testAddress)
 	}
 
 }

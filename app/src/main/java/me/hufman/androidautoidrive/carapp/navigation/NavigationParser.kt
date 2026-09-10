@@ -34,6 +34,7 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 		private val COORDINATES = Regex("^($NUMBER)\\s*,\\s*($NUMBER)(?:\\s*,$NUMBER)?\\s*(?:\\((.*)\\))?$", RegexOption.DOT_MATCHES_ALL)
 		private val COORDINATE_PREFIX = Regex("^($NUMBER\\s*,\\s*$NUMBER)(?:,|$)")
 		private val PLACE_COORDINATES = Regex("!3d($NUMBER)!4d($NUMBER)(?:!|$)")
+		private val MAP_DATA_FIELD = Regex("^([1-9][0-9]*)([a-z])(.*)$", RegexOption.DOT_MATCHES_ALL)
 		val PLUSCODE_SPLITTER = Regex("^([2-9CFGHJMPQRVWX+]+)([, ](.*))?")
 		val PLUSCODE_URL_MATCHER = Regex("^/+([2-9CFGHJMPQRVWX+]+([, ](.*))?)$")
 		private val GOOGLE_HOST = Regex("(?:[a-z0-9-]+\\.)*google\\.(?:com|[a-z]{2}|(?:com|co)\\.[a-z]{2})", RegexOption.IGNORE_CASE)
@@ -135,7 +136,7 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 		return parsePlusCode(matcher.groupValues[1])
 	}
 
-	private fun parsePlusCode(plusCode: String): Address? {
+	private fun parsePlusCode(plusCode: String, allowReferenceLookup: Boolean = true): Address? {
 		val parsed = PLUSCODE_SPLITTER.matchEntire(plusCode) ?: return null
 		val code = parsed.groupValues[1]
 		val reference = parsed.groupValues[3]
@@ -145,6 +146,7 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 			return null
 		}
 		if (olc.isShort && reference.isNotBlank()) {
+			if (!allowReferenceLookup) return null
 			val referenceName = reference.replace('+', ' ').trim()
 			val result = addressSearcher.search(referenceName) ?: return null
 			olc = olc.recover(result.latitude, result.longitude)
@@ -155,6 +157,64 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 
 		val area = olc.decode()
 		return latlongToAddress(LatLong(area.centerLatitude, area.centerLongitude))
+	}
+
+	private data class MapDataField(val number: Int, val type: Char, val value: String, val children: List<MapDataField> = emptyList())
+
+	/**
+	 * Google share links use !NmK messages whose following K tokens belong to that message.
+	 * This is an undocumented format: reject unfamiliar or malformed structure and geocode instead.
+	 */
+	private fun parseMapData(data: String): List<MapDataField>? {
+		if (!data.startsWith('!') || data.length > 65536) return null
+		val tokens = data.substring(1).split('!')
+		if (tokens.size > 4096) return null
+		fun parseFields(start: Int, end: Int, depth: Int): List<MapDataField>? {
+			if (depth > 16) return null
+			val fields = ArrayList<MapDataField>()
+			var index = start
+			while (index < end) {
+				val match = MAP_DATA_FIELD.matchEntire(tokens[index]) ?: return null
+				val number = match.groupValues[1].toIntOrNull() ?: return null
+				val type = match.groupValues[2][0]
+				val value = match.groupValues[3]
+				index++
+				if (type == 'm') {
+					val count = value.toIntOrNull()?.takeIf { it >= 0 && it <= end - index } ?: return null
+					val children = parseFields(index, index + count, depth + 1) ?: return null
+					fields.add(MapDataField(number, type, value, children))
+					index += count
+				} else {
+					fields.add(MapDataField(number, type, value))
+				}
+			}
+			return fields
+		}
+		return parseFields(0, tokens.size, 0)
+	}
+
+	private fun parseDirectionsDestination(data: String?, stopCount: Int, label: String): Address? {
+		val fields = data?.let { parseMapData(it) } ?: return null
+		val routes = ArrayList<List<MapDataField>>()
+		fun findRoutes(fields: List<MapDataField>) {
+			// Route containers are nested !4m messages. Their immediate !1m children are ordered stops.
+			fields.filter { it.number == 4 && it.type == 'm' }.forEach { route ->
+				val stops = route.children.filter { it.number == 1 && it.type == 'm' }
+				if (stops.size == stopCount) routes.add(stops)
+				findRoutes(route.children)
+			}
+		}
+		findRoutes(fields)
+		val destination = routes.singleOrNull()?.lastOrNull() ?: return null
+		// Only a coordinate block directly attached to the final stop qualifies. Nested route
+		// shaping points, other stops, and the @ camera center are not destination coordinates.
+		val coordinates = destination.children.filter { it.type == 'm' && (it.number == 2 || it.number == 8) }.singleOrNull() ?: return null
+		if (coordinates.children.size != 2) return null
+		val latitudeField = if (coordinates.number == 2) 2 else 3
+		val longitudeField = if (coordinates.number == 2) 1 else 4
+		val latitude = coordinates.children.singleOrNull { it.number == latitudeField && it.type == 'd' }?.value ?: return null
+		val longitude = coordinates.children.singleOrNull { it.number == longitudeField && it.type == 'd' }?.value ?: return null
+		return parseCoordinates("$latitude,$longitude", label)
 	}
 
 	private fun parseGoogleUrl(original: URI): Address? {
@@ -184,8 +244,18 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 			// The first segment is the origin (possibly blank); use the final stop, not a waypoint.
 			if (stops.size >= 2) {
 				val finalStop = stops.last()
-				parsePlusCode(decode(finalStop.replace("+", "%2B")))?.let { return it }
-				return parseLocation(decode(finalStop))
+				val name = decode(finalStop)
+				val literalCoordinates = name.removePrefix("loc:").trim()
+				if (COORDINATES.matches(literalCoordinates)) return parseCoordinates(literalCoordinates)
+				val plusCode = decode(finalStop.replace("+", "%2B"))
+				parsePlusCode(plusCode, allowReferenceLookup = false)?.let { return it }
+				val dataSegments = segments.filter { it.startsWith("data=") }
+				val data = if (dataSegments.isEmpty()) query["data"] else dataSegments.singleOrNull()?.let {
+					decode(it.removePrefix("data=").replace("+", "%2B"))
+				}
+				parseDirectionsDestination(data, stops.size, name)?.let { return it }
+				parsePlusCode(plusCode)?.let { return it }
+				return parseLocation(name)
 			}
 		}
 

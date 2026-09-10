@@ -33,6 +33,19 @@ earlier waypoint. Short-link resolution has bounded redirects and network timeou
 Failed lookups stop the progress indicator, and returning to the share window does
 not automatically submit the same destination again.
 
+The native-navigation update also resolves supported Google directions links from
+the final stop's embedded coordinates, avoiding a network geocoder lookup. This
+undocumented URL structure is parsed conservatively; unfamiliar or ambiguous data
+falls back to the destination address. An unsuccessful lookup is no longer repeated
+automatically, so one bad link does not cause two full network waits.
+
+Navigation acknowledgements now wake on car status events, without the previous
+one-second polling delay. Initially inactive guidance retains bounded retries.
+When guidance was already active, the destination is sent once and the UI asks you
+to check the car's destination: the previous route's active flag cannot confirm
+that a replacement destination was accepted. Cancellation removes observers and
+prevents a queued obsolete request from starting navigation.
+
 Google's [Maps URLs interface](https://developers.google.com/maps/documentation/urls/get-started)
 does not require an API key. Address lookup still needs the phone's geocoder and
 short links require a network connection.
@@ -51,6 +64,9 @@ would not turn that connection into an Android Auto projection receiver. Google'
 expects a compatible head unit. AAIdrive already provides its own music browsing,
 messaging/replies, voice-assistant access, calendar integration, and native navigation
 handoff over the BMW interface.
+
+For Google Maps pricing, screen mirroring, and the limits of Android-to-CarPlay
+translation, see [navigation options](maxgiup-navigation-options.md).
 
 ## Optimized APK
 
