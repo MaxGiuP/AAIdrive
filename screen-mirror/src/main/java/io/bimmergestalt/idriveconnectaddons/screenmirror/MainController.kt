@@ -15,14 +15,16 @@ class MainController(val activity: Activity) {
     }
 
     private fun tryOpenActivity(intent: Intent): Boolean {
-        if (activity.packageManager.resolveActivity(intent, 0) != null) {
-            try {
-                activity.startActivity(intent)
-                return true
-            } catch (e: ActivityNotFoundException) {
-            } catch (e: IllegalArgumentException) {}
+        return try {
+            activity.startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
+        } catch (_: SecurityException) {
+            false
         }
-        return false
     }
 
     fun openApplicationPermissions(packageName: String) {
@@ -73,8 +75,9 @@ class MainController(val activity: Activity) {
     fun stopMirroring() { NotificationService.stopNotification(activity) }
 
     fun installHeadunit() {
-        tryOpenActivity(Intent(Intent.ACTION_VIEW,
-            Uri.parse("https://github.com/andreknieriem/open-headunit/releases/tag/v.3.4.0-beta1")))
+        val setup = activity.packageManager.getLaunchIntentForPackage("io.github.maxgiup.aaidrive.setup")
+        tryOpenActivity(setup ?: Intent(Intent.ACTION_VIEW,
+            Uri.parse("https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk")))
     }
 
     fun openSetup() {

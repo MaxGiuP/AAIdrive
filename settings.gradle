@@ -3,3 +3,4 @@ plugins {
 }
 include ':app', ':spotify-app-remote'
 include ':screen-mirror', ':screen-mirror-lib'
+include ':installer'

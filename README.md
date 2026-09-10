@@ -1,8 +1,8 @@
-> **MaxGiuP fork:** Installable APKs are in [apk/](apk/). Media defaults, selectable
-> playback queues and native BMW destination sharing are included in AAIdrive.
-> The new [experimental Android Auto projection companion](docs/android-auto-projection.md)
-> can relay a separately installed Open Headunit receiver through the BMW display
-> connection. Setup and phone/car testing are required; no Google Maps API key is needed.
+> **MaxGiuP fork:** [Download one Setup APK](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk)
+> containing AAIdrive, Projection and Open Headunit. Its guided installer handles the
+> three components with Android's required confirmations. See [one-APK setup](docs/one-apk-setup.md).
+> Media improvements and native BMW destination sharing are included. Android Auto
+> projection remains experimental and requires phone/car setup; no Google Maps API key is needed.
 
 AAIdrive
 ========

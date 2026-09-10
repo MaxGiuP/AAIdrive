@@ -38,6 +38,7 @@
         android:protectionLevel="dangerous"/>
 
     <queries>
+        <package android:name="io.github.maxgiup.aaidrive.setup" />
         <package android:name="io.github.maxgiup.aaidrive.projection" />
         <!-- Session-only players and common patched variants, including Play builds. -->
         <package android:name="app.revanced.android.apps.youtube.music" />

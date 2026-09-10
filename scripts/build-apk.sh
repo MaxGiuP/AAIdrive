@@ -20,6 +20,8 @@ AndroidAutoIdrive_SpotifyApiKey=unset ./gradlew \
     :app:assembleNomapNonalyticsFullOptimized \
     :screen-mirror:testDebugUnitTest \
     :screen-mirror:assembleRelease \
+    :installer:testDebugUnitTest \
+    :installer:assembleRelease \
     -PAndroidAutoIdrive_SpotifyApiKey=unset --max-workers=4 --console=plain
 
 # Gradle validates test inputs even when their outputs are UP-TO-DATE. Bind those exact
@@ -38,6 +40,8 @@ builds = {
              "app/build/test-results/testNomapNonalyticsFullDebugUnitTest"),
     "projection": ("screen-mirror/build/outputs/apk/release",
                    "screen-mirror/build/test-results/testDebugUnitTest"),
+    "setup": ("installer/build/outputs/apk/release",
+              "installer/build/test-results/testDebugUnitTest"),
 }
 files = []
 stamp["test_reports"] = {}

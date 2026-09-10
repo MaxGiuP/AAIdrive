@@ -7,4 +7,5 @@ The original license is retained in both directories. This fork modernizes captu
 adds Open Headunit integration and iDrive controls, and changes the application ID.
 
 Open Headunit is a separately installed application under AGPL-3.0. Its receiver
-implementation and APK are not incorporated into this repository.
+implementation is not linked into the Projection app. The unchanged receiver APK
+is bundled in the separate Setup APK; see [source and license notices](../third-party/open-headunit/README.md).

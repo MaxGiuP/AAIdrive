@@ -19,9 +19,10 @@ class AddonsPageFragment: Fragment() {
 		super.onViewCreated(view, savedInstanceState)
         view.findViewById<Button>(R.id.btnProjection).setOnClickListener {
             val launch = requireContext().packageManager.getLaunchIntentForPackage("io.github.maxgiup.aaidrive.projection")
+                ?: requireContext().packageManager.getLaunchIntentForPackage("io.github.maxgiup.aaidrive.setup")
             try {
                 startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse(
-                    "https://github.com/MaxGiuP/AAIdrive/blob/main/docs/android-auto-projection.md")))
+                    "https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk")))
             } catch (_: android.content.ActivityNotFoundException) {
                 // A receiver/browser may have been removed since the query.
             }

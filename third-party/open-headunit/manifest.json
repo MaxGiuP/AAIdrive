@@ -1,0 +1,65 @@
+{
+  "name": "Open Headunit",
+  "release_tag": "v.3.4.0-beta1",
+  "release_url": "https://github.com/andreknieriem/open-headunit/releases/tag/v.3.4.0-beta1",
+  "license": "AGPL-3.0-or-later",
+  "apk": {
+    "file": "apk/Open-Headunit-v3.4.0-beta1.apk",
+    "size_bytes": 11888486,
+    "sha256": "4bb5cce8ff49f745413fd67695c74f864c9f4b9284592cc75b2ee4839818f5fd",
+    "url": "https://github.com/andreknieriem/open-headunit/releases/download/v.3.4.0-beta1/com.andrerinas.headunitrevived_3.4.0-beta1.apk",
+    "package_name": "com.andrerinas.headunitrevived",
+    "version_name": "3.4.0-beta1",
+    "version_code": 106,
+    "min_sdk": 16,
+    "target_sdk": 36,
+    "signer_sha256": "615bc3c7a74839918d01517e49397f503a5473f89266af55a26d485c1e86155d",
+    "signature_schemes_verified": [
+      "v1",
+      "v2"
+    ],
+    "abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86",
+      "x86_64"
+    ],
+    "zip_alignment_16kb_verified": true,
+    "all_native_load_segments_16kb_aligned": true,
+    "modified": false
+  },
+  "source": {
+    "file": "third-party/open-headunit/open-headunit-c5184d782aa5727572c1bd7ee131bbc84a55f75f-source.tar.gz",
+    "size_bytes": 4995197,
+    "sha256": "c673d220bb4ce476429f26f963bd4757e5dbc5ea438da60cd03e4810e8ce7aea",
+    "commit": "c5184d782aa5727572c1bd7ee131bbc84a55f75f",
+    "url": "https://github.com/andreknieriem/open-headunit/tree/c5184d782aa5727572c1bd7ee131bbc84a55f75f",
+    "commit_verified_against_apk_metadata": true,
+    "excluded_files": [
+      "keystore.jkc"
+    ],
+    "submodules": []
+  },
+  "bundled_native_library_sources": [
+    {
+      "file": "third-party/open-headunit/ffmpeg-7.1.1.tar.xz",
+      "size_bytes": 11019500,
+      "sha256": "733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1",
+      "name": "FFmpeg",
+      "version": "7.1.1",
+      "license": "LGPL-2.1-or-later",
+      "url": "https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz"
+    },
+    {
+      "file": "third-party/open-headunit/libusb-1.0.27.tar.bz2",
+      "size_bytes": 643680,
+      "sha256": "ffaa41d741a8a3bee244ac8e54a72ea05bf2879663c098c82fc5757853441575",
+      "name": "libusb",
+      "version": "1.0.27.11882",
+      "license": "LGPL-2.1-or-later",
+      "url": "https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.tar.bz2"
+    }
+  ],
+  "source_build_verified": false,
+  "phone_and_car_tested": false
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify and package both tested APKs without including private signing material."""
+"""Verify and package the tested component and setup APKs without including private signing material."""
 
 import hashlib
 import json
@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 
 BUILDS = (
@@ -33,6 +34,16 @@ BUILDS = (
         "package": "io.github.maxgiup.aaidrive.projection",
         "apk": "AAIdrive-Projection.apk",
         "info": "projection-build-info.json",
+    },
+    {
+        "name": "setup",
+        "outputs": "installer/build/outputs/apk/release",
+        "reports": "installer/build/test-results/testDebugUnitTest",
+        "test_task": ":installer:testDebugUnitTest",
+        "variant": "release",
+        "package": "io.github.maxgiup.aaidrive.setup",
+        "apk": "AAIdrive-Setup.apk",
+        "info": "setup-build-info.json",
     },
 )
 
@@ -141,7 +152,32 @@ def prepare_artifact(repo, build_tools, source_commit, stamp, build):
         "unit_test_task": build["test_task"],
         "phone_and_car_tested": False,
     }
+    if build["name"] == "setup":
+        info["bundled_apps"] = verify_setup_payload(repo, source_apk)
     return source_apk, build, info
+
+
+def verify_setup_payload(repo, setup_apk):
+    expected = {}
+    for build in BUILDS[:2]:
+        directory = repo / build["outputs"]
+        metadata = json.loads((directory / "output-metadata.json").read_text())
+        path = directory / metadata["elements"][0]["outputFile"]
+        expected["apps/" + build["apk"]] = hashlib.sha256(path.read_bytes()).hexdigest()
+    upstream = json.loads((repo / "third-party/open-headunit/manifest.json").read_text())["apk"]
+    expected["apps/Open-Headunit-v3.4.0-beta1.apk"] = upstream["sha256"]
+    with zipfile.ZipFile(setup_apk) as archive:
+        catalog = json.loads(archive.read("assets/bundled-apps.json"))
+        if len(catalog) != 3 or {app["file"] for app in catalog} != set(expected):
+            raise RuntimeError("Setup must bundle exactly the three expected component APKs")
+        for app in catalog:
+            payload = archive.read("assets/" + app["file"])
+            digest = hashlib.sha256(payload).hexdigest()
+            if digest != expected[app["file"]] or digest != app["sha256"]:
+                raise RuntimeError("Setup includes a stale or altered component APK")
+        if not archive.read("assets/LICENSES.txt") or not archive.read("assets/SETUP.md"):
+            raise RuntimeError("Setup must include offline help and source/license notices")
+        return catalog
 
 
 def main():
@@ -169,7 +205,7 @@ def main():
     versions = [path for path in (Path(sdk) / "build-tools").iterdir() if re.fullmatch(r"\d+\.\d+\.\d+", path.name)]
     build_tools = max(versions, key=lambda path: tuple(map(int, path.name.split("."))))
 
-    # Validate both artifacts and both update paths before replacing either published APK.
+    # Validate all artifacts and update paths before replacing either published APK.
     artifacts = [prepare_artifact(repo, build_tools, source_commit, stamp, build) for build in BUILDS]
     artifact_dir = repo / "apk"
     artifact_dir.mkdir(exist_ok=True)

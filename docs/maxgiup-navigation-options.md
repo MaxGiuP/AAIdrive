@@ -34,8 +34,8 @@ Connected Apps; Google Maps continues to calculate and display its own route.
 The companion also forwards iDrive navigation controls to Open Headunit.
 No Google Cloud account or API key is needed for this path.
 
-Install both fork APKs in [apk/](../apk/) and the linked Open Headunit release, then
-follow the setup guide. Recent Android Auto versions require manually starting the
+Use the [single Setup APK](one-apk-setup.md), which includes AAIdrive, Projection
+and Open Headunit, then follow its guided setup. Recent Android Auto versions require manually starting the
 Android Auto developer headunit server. This has not yet been tested on a phone/car.
 The final link transfers JPEG frames, so BMW transport bandwidth still limits
 smoothness, especially over Bluetooth. Native BMW destination handoff remains
