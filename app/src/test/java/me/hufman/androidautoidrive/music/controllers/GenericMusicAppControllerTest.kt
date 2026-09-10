@@ -316,6 +316,48 @@ class GenericMusicAppControllerTest {
 	}
 
 	@Test
+	fun testQueueParsingReusesUnchangedItemsAndUpdatesTitle() {
+		val descriptionValue = mock<MediaDescriptionCompat> {
+			on { mediaId } doReturn "song"
+			on { title } doReturn "Song"
+		}
+		val queueItem = mock<MediaSessionCompat.QueueItem> {
+			on { queueId } doReturn 1L
+			on { description } doReturn descriptionValue
+		}
+		whenever(mediaController.queue) doReturn listOf(queueItem)
+		val first = controller.getQueue()
+		assertSame(first, controller.getQueue())
+		verify(descriptionValue, times(1)).title
+
+		whenever(mediaController.queueTitle) doReturn "Renamed playlist"
+		val renamed = controller.getQueue()
+		assertEquals("Renamed playlist", renamed?.title)
+		assertSame(first?.songs, renamed?.songs)
+		verify(descriptionValue, times(1)).title
+	}
+
+	@Test
+	fun testQueueParsingDetectsChangesToTheSameList() {
+		val descriptions = (1..2).map { index -> mock<MediaDescriptionCompat> {
+			on { mediaId } doReturn "song-$index"
+			on { title } doReturn "Song $index"
+		} }
+		val items = descriptions.mapIndexed { index, value -> mock<MediaSessionCompat.QueueItem> {
+			on { queueId } doReturn index.toLong()
+			on { description } doReturn value
+		} }.toMutableList()
+		whenever(mediaController.queue) doReturn items
+		val original = controller.getQueue()
+		items.reverse()
+		val reordered = controller.getQueue()
+		assertNotSame(original?.songs, reordered?.songs)
+		assertEquals(listOf("song-2", "song-1"), reordered?.songs?.map { it.mediaId })
+		items.clear()
+		assertEquals(emptyList<MusicMetadata>(), controller.getQueue()?.songs)
+	}
+
+	@Test
 	fun testQueueContainsEveryPublishedSongInOrder() {
 		val queueItems = (0 until 150).map { index ->
 			val descriptionValue = mock<MediaDescriptionCompat> {

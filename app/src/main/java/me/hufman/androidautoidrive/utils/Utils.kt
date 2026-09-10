@@ -12,8 +12,10 @@ import ar.com.hjg.pngj.ImageLineInt
 import ar.com.hjg.pngj.PngReaderInt
 import ar.com.hjg.pngj.PngWriter
 import ar.com.hjg.pngj.chunks.PngChunkPLTE
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -260,7 +262,9 @@ suspend inline fun <T> Deferred<T>.awaitPending(timeout: Long, timeoutHandler: (
 		return withTimeout(timeout) {
 			deferred.await()
 		}
-	} catch (ex: CancellationException) {
+	} catch (ex: TimeoutCancellationException) {
+		// A parent timeout or a cancelled search must not start an obsolete retry.
+		currentCoroutineContext().ensureActive()
 		timeoutHandler()
 		deferred.await()
 	}

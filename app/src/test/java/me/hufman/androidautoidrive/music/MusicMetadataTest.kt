@@ -21,6 +21,41 @@ class MusicMetadataTest {
 	}
 
 	@Test
+	fun sharedArtworkDoesNotComparePixels() {
+		val artwork = mock<Bitmap>()
+		val first = MusicMetadata(mediaId = "song", coverArt = artwork)
+		val second = MusicMetadata(mediaId = "song", coverArt = artwork)
+		assertEquals(first, second)
+		verify(artwork, never()).sameAs(any())
+	}
+
+	@Test
+	fun distinctArtworkStillChecksContents() {
+		val firstArtwork = mock<Bitmap>()
+		val secondArtwork = mock<Bitmap>()
+		val first = MusicMetadata(mediaId = "song", coverArt = firstArtwork)
+		val second = MusicMetadata(mediaId = "song", coverArt = secondArtwork)
+		assertFalse(first == second)
+		whenever(firstArtwork.sameAs(secondArtwork)) doReturn true
+		assertEquals(first, second)
+	}
+
+	@Test
+	fun queueDescriptionsDetectTextChangesWithoutInspectingArtwork() {
+		val firstArtwork = mock<Bitmap>()
+		val secondArtwork = mock<Bitmap>()
+		val first = MusicMetadata(mediaId = "song", subtitle = "Artist", coverArt = firstArtwork)
+		val second = MusicMetadata(mediaId = "song", subtitle = "Artist", coverArt = secondArtwork)
+		assertTrue(listOf(first).hasSameQueueDescriptions(listOf(second)))
+		assertFalse(listOf(first).hasSameQueueItems(listOf(second)))
+		assertTrue(listOf(first).hasSameQueueItems(listOf(first)))
+		verifyNoInteractions(firstArtwork, secondArtwork)
+		val changed = MusicMetadata(mediaId = "song", subtitle = "Different artist", coverArt = firstArtwork)
+		assertFalse(first == changed)
+		assertFalse(listOf(first).hasSameQueueDescriptions(listOf(changed)))
+	}
+
+	@Test
 	fun testQueueItemPreservesPlaybackIdAndArtwork() {
 		val artwork = mock<Bitmap>()
 		val artworkUri = mock<Uri> {

@@ -22,10 +22,16 @@ class NavIntentActivity: AppCompatActivity() {
 	companion object {
 		val TAG = "NavActivity"
 
-		val URL_MATCHER = Regex("(https?|geo|google.navigation)://[^ ]*")
+		val URL_MATCHER = NavigationParser.URL_MATCHER
 	}
 
 	val viewModel by viewModels<NavigationStatusModel> { NavigationStatusModel.Factory(this.applicationContext) }
+	private val navigationController by lazy {
+		NavigationSearchController(lifecycleScope,
+			NavigationParser(AndroidGeocoderSearcher(applicationContext), URLRedirector()),
+			PlaceSearchProvider(applicationContext).getInstance(),
+			NavigationTriggerDeterminator(applicationContext), viewModel)
+	}
 
 	@Suppress("DEPRECATION")
 	override fun onAttachedToWindow() {
@@ -82,27 +88,29 @@ class NavIntentActivity: AppCompatActivity() {
 				}
 			}
 		}
+		handleNavigationIntent(intent)
 	}
 
 	private fun decodeTextQuery(query: String?): String? {
 		query ?: return null
-		return URL_MATCHER.find(query)?.let { it.value }
+		return NavigationParser.extractUrl(query)
 	}
 
-	override fun onResume() {
-		super.onResume()
-		val query = when(intent?.action) {
-			Intent.ACTION_VIEW -> intent?.dataString
-			Intent.ACTION_SEND -> decodeTextQuery(intent?.getStringExtra(Intent.EXTRA_TEXT))
+	override fun onNewIntent(intent: Intent) {
+		super.onNewIntent(intent)
+		setIntent(intent)
+		handleNavigationIntent(intent)
+	}
+
+	private fun handleNavigationIntent(incoming: Intent?) {
+		val query = when(incoming?.action) {
+			Intent.ACTION_VIEW -> incoming.dataString
+			Intent.ACTION_SEND -> decodeTextQuery(incoming.getStringExtra(Intent.EXTRA_TEXT))
 			else -> null
 		}
 		if (query != null) {
 			findViewById<TextView>(R.id.txtNavError).text = query.toString()       // in case we need to show it for parse errors
-			val navParser = NavigationParser(AndroidGeocoderSearcher(this.applicationContext), URLRedirector())
-			val navSearch = PlaceSearchProvider(applicationContext).getInstance()
-			val navTrigger = NavigationTriggerDeterminator(this.applicationContext)
-			val controller = NavigationSearchController(lifecycleScope, navParser, navSearch, navTrigger, viewModel)
-			controller.startNavigation(query.toString())
+			navigationController.startNavigation(query)
 		}
 	}
 }

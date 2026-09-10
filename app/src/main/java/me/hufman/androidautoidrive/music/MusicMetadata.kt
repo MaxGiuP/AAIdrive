@@ -141,6 +141,12 @@ open class MusicMetadata(val mediaId: String? = null,
 		}
 	}
 
+	/** Compare the text and identifiers used by queue lists without inspecting artwork pixels. */
+	fun hasSameQueueDescription(other: MusicMetadata?): Boolean {
+		return this === other || (other != null && mediaId == other.mediaId && queueId == other.queueId &&
+				title == other.title && artist == other.artist && album == other.album && subtitle == other.subtitle)
+	}
+
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
 		if (javaClass != other?.javaClass) return false
@@ -155,16 +161,16 @@ open class MusicMetadata(val mediaId: String? = null,
 		if (artist != other.artist) return false
 		if (album != other.album) return false
 		if (title != other.title) return false
+		if (subtitle != other.subtitle) return false
 		if (trackNumber != other.trackNumber) return false
 		if (trackCount != other.trackCount) return false
 		if (coverArtUri != other.coverArtUri) return false
 
-		/** CoverArt equality is tricky
-		 * First check if they have the same null or notnull state
-		 * If both are null, the sameAs is null
-		 * If both are notnull, the sameAs is a boolean
-		 */
-		if (((coverArt == null) != (other.coverArt == null)) || (coverArt?.sameAs(other.coverArt) == false)) return false
+		val thisCoverArt = coverArt
+		val otherCoverArt = other.coverArt
+		// Metadata snapshots usually share the same immutable bitmap. Avoid a pixel comparison then.
+		if (thisCoverArt !== otherCoverArt &&
+				(thisCoverArt == null || otherCoverArt == null || !thisCoverArt.sameAs(otherCoverArt))) return false
 
 		return true
 	}
@@ -178,6 +184,7 @@ open class MusicMetadata(val mediaId: String? = null,
 		result = 31 * result + (artist?.hashCode() ?: 0)
 		result = 31 * result + (album?.hashCode() ?: 0)
 		result = 31 * result + (title?.hashCode() ?: 0)
+		result = 31 * result + (subtitle?.hashCode() ?: 0)
 		result = 31 * result + (trackNumber?.hashCode() ?: 0)
 		result = 31 * result + (trackCount?.hashCode() ?: 0)
 		return result
@@ -186,6 +193,20 @@ open class MusicMetadata(val mediaId: String? = null,
 	override fun toString(): String {
 		return title ?: mediaId ?: ""
 	}
+}
+
+/** Queue presenters compare only displayed text and playback identifiers, excluding artwork. */
+fun List<MusicMetadata>?.hasSameQueueDescriptions(other: List<MusicMetadata>?): Boolean {
+	if (this === other) return true
+	if (this == null || other == null || size != other.size) return false
+	return indices.all { this[it].hasSameQueueDescription(other[it]) }
+}
+
+/** Keep action snapshots current without allocating another list when the objects are unchanged. */
+fun List<MusicMetadata>?.hasSameQueueItems(other: List<MusicMetadata>?): Boolean {
+	if (this === other) return true
+	if (this == null || other == null || size != other.size) return false
+	return indices.all { this[it] === other[it] }
 }
 
 // Helper functions for convenient access to common metadata fields

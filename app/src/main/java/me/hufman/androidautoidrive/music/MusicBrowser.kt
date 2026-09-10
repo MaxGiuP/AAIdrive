@@ -15,14 +15,16 @@ import me.hufman.androidautoidrive.music.controllers.GenericMusicAppController
 import me.hufman.androidautoidrive.music.controllers.MusicAppController
 import java.util.*
 
-class MusicBrowser(val handler: Handler, val mediaBrowser: MediaBrowserCompat, val musicAppInfo: MusicAppInfo) {
+class MusicBrowser(val handler: Handler, val mediaBrowser: MediaBrowserCompat, val musicAppInfo: MusicAppInfo,
+                   private val dispatcher: CoroutineDispatcher = handler.asCoroutineDispatcher()) {
 	companion object {
 		const val TAG = "MusicBrowser"
 	}
 	// all interactions with MediaBrowserCompat must be from the same thread
 
-	var connected = true   // whether we are still connected
+	@Volatile var connected = true   // whether we are still connected
 		private set
+	private val pendingRequests = Collections.synchronizedSet(mutableSetOf<CompletableDeferred<*>>())
 
 	init {
 		if (musicAppInfo.className == null) {
@@ -119,95 +121,64 @@ class MusicBrowser(val handler: Handler, val mediaBrowser: MediaBrowserCompat, v
 	}
 
 	fun disconnect() {
+		connected = false
+		synchronized(pendingRequests) { pendingRequests.toList() }.forEach { it.cancel() }
 		handler.post {
-			connected = false
 			mediaBrowser.disconnect()
 		}
 	}
 
-	suspend fun browse(path: String?, timeout: Long = 10000): List<MediaBrowserCompat.MediaItem> {
+	suspend fun browse(path: String?, timeout: Long = 10000): List<MediaBrowserCompat.MediaItem> = withContext(dispatcher) {
+		if (!connected) return@withContext emptyList()
+		val browsePath = (path ?: getRoot()).ifEmpty { "/" }
 		val deferred = CompletableDeferred<List<MediaBrowserCompat.MediaItem>>()
-		withContext(handler.asCoroutineDispatcher()) {
-			if (connected) {
-				val browsePath = (path ?: getRoot()).let {
-					// the browsePath (parentId) is not allowed to be blank
-					if (it.isEmpty()) { "/" } else it
-				}
-
-				var callback: MediaBrowserCompat.SubscriptionCallback? = null
-				callback = object : MediaBrowserCompat.SubscriptionCallback() {
-					override fun onError(parentId: String) {
-						mediaBrowser.unsubscribe(browsePath, callback!!)
-						deferred.complete(emptyList())
-					}
-
-					override fun onChildrenLoaded(parentId: String, children: MutableList<MediaBrowserCompat.MediaItem?>) {
-						mediaBrowser.unsubscribe(browsePath, callback!!)
-						deferred.complete(children.filterNotNull())
-					}
-
-					override fun onError(parentId: String, options: Bundle) {
-						onError(parentId)
-					}
-
-					override fun onChildrenLoaded(parentId: String, children: MutableList<MediaBrowserCompat.MediaItem?>, options: Bundle) {
-						onChildrenLoaded(parentId, children)
-					}
-				}
-				mediaBrowser.subscribe(browsePath, callback)
-
-				// now we wait for the results
-				try {
-					withTimeout(timeout) {
-						while (!deferred.isCompleted) {
-							delay(100)
-						}
-					}
-				} catch (e: CancellationException) {
-					// timeout expired
-					mediaBrowser.unsubscribe(browsePath, callback)
-				}
-				if (!deferred.isCompleted) {
-					deferred.complete(LinkedList())
-				}
-				true    // requires a boolean for this branch?
-			} else {
-				deferred.complete(LinkedList())
+		val callback = object : MediaBrowserCompat.SubscriptionCallback() {
+			override fun onError(parentId: String) {
+				deferred.complete(emptyList())
+			}
+			override fun onChildrenLoaded(parentId: String, children: MutableList<MediaBrowserCompat.MediaItem?>) {
+				deferred.complete(children.filterNotNull())
+			}
+			override fun onError(parentId: String, options: Bundle) = onError(parentId)
+			override fun onChildrenLoaded(parentId: String, children: MutableList<MediaBrowserCompat.MediaItem?>, options: Bundle) =
+				onChildrenLoaded(parentId, children)
+		}
+		pendingRequests.add(deferred)
+		try {
+			if (!connected) return@withContext emptyList()
+			mediaBrowser.subscribe(browsePath, callback)
+			withTimeoutOrNull(timeout) { deferred.await() } ?: emptyList()
+		} finally {
+			pendingRequests.remove(deferred)
+			deferred.cancel()
+			// Unsubscribe after success, timeout or caller cancellation, on the browser thread.
+			try {
+				mediaBrowser.unsubscribe(browsePath, callback)
+			} catch (e: IllegalStateException) {
+				Log.d(TAG, "Browser already disconnected while clearing $browsePath")
 			}
 		}
-		return deferred.await()
 	}
 
-	suspend fun search(query: String, timeout: Long = 5000): List<MediaBrowserCompat.MediaItem>? {
+	suspend fun search(query: String, timeout: Long = 5000): List<MediaBrowserCompat.MediaItem>? = withContext(dispatcher) {
+		if (!connected) return@withContext null
 		val deferred = CompletableDeferred<List<MediaBrowserCompat.MediaItem>?>()
-		withContext(handler.asCoroutineDispatcher()) {
-			if (connected) {
-				mediaBrowser.search(query, null, object : MediaBrowserCompat.SearchCallback() {
-					override fun onError(query: String, extras: Bundle?) {
-						deferred.complete(null)
-					}
-
-					override fun onSearchResult(query: String, extras: Bundle?, items: MutableList<MediaBrowserCompat.MediaItem?>) {
-						deferred.complete(items.filterNotNull())
-					}
-				})
-			} else {
-				deferred.complete(null)
-			}
-			// now we wait for the results
-			try {
-				withTimeout(timeout) {
-					while (!deferred.isCompleted) {
-						delay(100)
-					}
+		pendingRequests.add(deferred)
+		try {
+			if (!connected) return@withContext null
+			mediaBrowser.search(query, null, object : MediaBrowserCompat.SearchCallback() {
+				override fun onError(query: String, extras: Bundle?) {
+					deferred.complete(null)
 				}
-			} catch (e: CancellationException) {
-				// timeout expired
-			}
-			if (!deferred.isCompleted) {
-				deferred.complete(null)
-			}
+				override fun onSearchResult(query: String, extras: Bundle?, items: MutableList<MediaBrowserCompat.MediaItem?>) {
+					deferred.complete(items.filterNotNull())
+				}
+			})
+			withTimeoutOrNull(timeout) { deferred.await() }
+		} finally {
+			pendingRequests.remove(deferred)
+			// MediaBrowser has no search-cancel API; ignore late callbacks after cancellation.
+			deferred.cancel()
 		}
-		return deferred.await()
 	}
 }

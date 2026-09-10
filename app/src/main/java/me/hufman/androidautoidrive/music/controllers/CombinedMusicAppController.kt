@@ -4,6 +4,8 @@ import android.os.DeadObjectException
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import me.hufman.androidautoidrive.MutableObservable
 import me.hufman.androidautoidrive.Observable
 import me.hufman.androidautoidrive.music.*
@@ -32,6 +34,8 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 
 	// remember the last controller that we browsed or searched through
 	private var browseableController: MusicAppController? = null
+	@Volatile private var disconnected = false
+	private val connecting = MutableStateFlow(true)
 
 	var callback: ((MusicAppController) -> Unit)? = null
 	var onCreatedCallback: (() -> Unit)? = null
@@ -39,9 +43,14 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	init {
 		controllers.forEach { pendingController ->
 			pendingController.subscribe { freshController ->
+				connecting.value = isPending()
+				if (disconnected) {
+					freshController?.disconnect()
+					return@subscribe
+				}
 				// a controller has connected/disconnected
+				onCreatedCallback?.invoke()
 				if (freshController != null) {
-					onCreatedCallback?.invoke()
 					callback?.invoke(freshController)
 
 					freshController.subscribe { controller ->
@@ -64,12 +73,15 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	 * Runs the given command against the first working of the connected controllers
 	 */
 	fun <R> withController(f: (MusicAppController) -> R): R? {
+		if (disconnected) return null
 		for (pendingController in controllers) {
 			val controller = pendingController.value ?: continue
 			try {
 				return f(controller)
 			} catch (e: DeadObjectException) {
 				// raise the disconnect to the main MusicController
+				throw e
+			} catch (e: CancellationException) {
 				throw e
 			} catch (e: UnsupportedOperationException) {
 				// this controller doesn't support it, try the next one
@@ -96,18 +108,19 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	}
 
 	fun isPending(): Boolean {
-		return controllers.any {
+		return !disconnected && controllers.any {
 			it.pending
 		}
 	}
 
 	override fun isConnected(): Boolean {
-		return controllers.any {
+		return !disconnected && controllers.any {
 			it.value?.isConnected() == true
 		}
 	}
 
 	override fun play() {
+		if (disconnected) return
 		val played = withController {
 			if (!it.isSupportedAction(MusicAction.PLAY)) {
 				throw UnsupportedOperationException()
@@ -124,6 +137,7 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	}
 
 	override fun pause() {
+		if (disconnected) return
 		// definitely make sure we pause, don't check for supported action
 		val pausedSessions = HashSet<MediaSessionCompat.Token>()
 		for (pendingController in controllers) {
@@ -179,6 +193,7 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	}
 
 	override fun customAction(action: CustomAction) {
+		if (disconnected) return
 		// check for exact matches
 		for (pendingController in controllers) {
 			val controller = pendingController.value ?: continue
@@ -225,12 +240,13 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	}
 
 	override fun isSupportedAction(action: MusicAction): Boolean {
-		return controllers.any {
+		return !disconnected && controllers.any {
 			it.value?.isSupportedAction(action) == true
 		}
 	}
 
 	override fun getCustomActions(): List<CustomAction> {
+		if (disconnected) return emptyList()
 		val actions = ArrayList<CustomAction>()
 		val nameIndices = HashMap<String, Int>()    // points to the array slot with the given action
 		for (pendingController in controllers) {
@@ -289,16 +305,12 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 
 	private suspend fun waitforConnect() {
 		if (isPending()) {
-			for (i in 0..10) {
-				delay(CONNECTION_TIMEOUT / 10L)
-				if (!isPending()) {
-					break
-				}
-			}
+			withTimeoutOrNull(CONNECTION_TIMEOUT.toLong()) { connecting.first { !it } }
 		}
 	}
 
 	override suspend fun browse(directory: MusicMetadata?): List<MusicMetadata> {
+		if (disconnected) return emptyList()
 		// always resume browsing from the previous controller that we were browsing
 		val browseableController = this.browseableController
 		if (directory != null && browseableController != null) {
@@ -306,10 +318,18 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 		}
 
 		waitforConnect()
+		if (disconnected) return emptyList()
 		// try to find a browseable controller
 		for (pendingController in controllers) {
 			val controller = pendingController.value ?: continue
-			val results = controller.browse(directory)
+			val results = try {
+				controller.browse(directory)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				Log.w(TAG, "Unable to browse $controller: $e")
+				continue
+			}
 			// detect empty results and skip this controller
 			if (results.isEmpty()) {
 				continue
@@ -323,10 +343,18 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 
 	override suspend fun search(query: String): List<MusicMetadata>? {
 		waitforConnect()
+		if (disconnected) return null
 		// try to find a searchable controller
 		for (pendingController in controllers) {
 			val controller = pendingController.value ?: continue
-			val results = controller.search(query) ?: continue
+			val results = try {
+				controller.search(query) ?: continue
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				Log.w(TAG, "Unable to search $controller: $e")
+				continue
+			}
 			// we have non-null results, return them as the search results
 			// make the Play and Browse commands dig through the search results
 			this@CombinedMusicAppController.browseableController = controller
@@ -340,7 +368,12 @@ class CombinedMusicAppController(val controllers: List<Observable<out MusicAppCo
 	}
 
 	override fun disconnect() {
+		if (disconnected) return
+		disconnected = true
 		this.callback = null
+		onCreatedCallback = null
+		browseableController = null
+		connecting.value = false
 		controllers.forEach {
 			try {
 				Log.d(TAG, "Disconnecting ${it.value} controller")

@@ -3,6 +3,9 @@ package android.util
 // From https://stackoverflow.com/a/46793567
 object Log {
 	@JvmStatic
+	fun isLoggable(tag: String, level: Int): Boolean = false
+
+	@JvmStatic
 	fun d(tag: String, msg: String): Int {
 		println("DEBUG: $tag: $msg")
 		return 0
@@ -24,6 +27,13 @@ object Log {
 	@JvmStatic
 	fun w(tag: String, msg: String): Int {
 		println("WARN: $tag: $msg")
+		return 0
+	}
+
+	@JvmStatic
+	fun w(tag: String, msg: String, e: Throwable): Int {
+		println("WARN: $tag: $msg")
+		e.printStackTrace()
 		return 0
 	}
 

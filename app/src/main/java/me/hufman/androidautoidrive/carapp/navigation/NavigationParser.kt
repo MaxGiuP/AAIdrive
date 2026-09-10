@@ -3,7 +3,6 @@ package me.hufman.androidautoidrive.carapp.navigation
 import android.content.Context
 import android.location.Address
 import android.location.Geocoder
-import android.util.Log
 import com.google.openlocationcode.OpenLocationCode
 import me.hufman.androidautoidrive.maps.LatLong
 import java.io.IOException
@@ -31,22 +30,27 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 	companion object {
 		val TAG = "NavigationParser"
 		val NUM_MATCHER = Regex("^([0-9]+)\\s+(.*)")
-		val LATLNG_MATCHER = Regex("^([-0-9.]+\\s*,\\s*[-0-9.]+).*")
-		val LATLNG_LABEL_MATCHER = Regex("^q=([-0-9.]+\\s*,\\s*[-0-9.]+\\s*)(,[-0-9.]+)?\\s*(\\((.*)\\))?$")
+		private const val NUMBER = "[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)"
+		private val COORDINATES = Regex("^($NUMBER)\\s*,\\s*($NUMBER)(?:\\s*,$NUMBER)?\\s*(?:\\((.*)\\))?$", RegexOption.DOT_MATCHES_ALL)
+		private val COORDINATE_PREFIX = Regex("^($NUMBER\\s*,\\s*$NUMBER)(?:,|$)")
+		private val PLACE_COORDINATES = Regex("!3d($NUMBER)!4d($NUMBER)(?:!|$)")
 		val PLUSCODE_SPLITTER = Regex("^([2-9CFGHJMPQRVWX+]+)([, ](.*))?")
 		val PLUSCODE_URL_MATCHER = Regex("^/+([2-9CFGHJMPQRVWX+]+([, ](.*))?)$")
-		val GOOGLE_OLC_MATCHER = Regex("^/maps/dir/+([2-9CFGHJMPQRVWX+]+([, ](.*))?)")
-		val GOOGLE_Q_MATCHER = Regex("^(.*[&?])?q=([^&]*).*")
-		val GOOGLE_QLL_MATCHER = Regex("^(.*[&?])?q=([-0-9.]+,\\s*[-0-9.]+).*")
-		val GOOGLE_LL_MATCHER = Regex("^(.*[&?])?ll=([-0-9.]+,\\s*[-0-9.]+).*")
-		val GOOGLE_SEARCHPATHLL_MATCHER = Regex("/maps/search/+()([-0-9.]+\\s*,\\s*[-0-9.]+\\s*).*")
-		val GOOGLE_PLACEPATHLL_MATCHER = Regex("/maps/place/([^/]*)/+@([-0-9.]+\\s*,\\s*[-0-9.]+\\s*).*")
-		val GOOGLE_DIRPATHLL_MATCHER = Regex("/maps/dir/[^/]*/+()([-0-9.]+\\s*,\\s*[-0-9.]+\\s*).*")
-		val GOOGLE_DIRPATH_MATCHER = Regex("/maps/dir/[^/]*/+([^/]+).*")
-		val GOOGLE_PLACEPATH_MATCHER = Regex("/maps/place/+([^/]+).*")
-		val GOOGLE_SEARCHPATH_MATCHER = Regex("/maps/search/+([^/]+).*")
-		val GOOGLE_QUERYLL_MATCHER = Regex("^(.*[&?])?(q|query|daddr|destination)=(loc:\\s+)?([-0-9.]+\\s*,\\s*[-0-9.]+\\s*).*")
-		val GOOGLE_QUERY_MATCHER = Regex("^(.*[&?])?(q|query|daddr|destination)=([^&]*).*")
+		private val GOOGLE_HOST = Regex("(?:[a-z0-9-]+\\.)*google\\.(?:com|[a-z]{2}|(?:com|co)\\.[a-z]{2})", RegexOption.IGNORE_CASE)
+		private val SHORT_LINK_HOSTS = setOf("goo.gl", "maps.app.goo.gl")
+		val URL_MATCHER = Regex("(?:https?://|geo:|google\\.navigation:)[^\\s<>\"]+", RegexOption.IGNORE_CASE)
+
+		/** Shares often include a place name and a URL on separate lines. */
+		fun extractUrl(text: CharSequence?): String? {
+			text ?: return null
+			val match = URL_MATCHER.find(text) ?: return null
+			val nativeUri = match.value.startsWith("geo:", true) || match.value.startsWith("google.navigation:", true)
+			// Some senders leave address spaces unescaped in a native URI on its own line.
+			val prefix = text.subSequence(0, match.range.first).toString().substringAfterLast('\n')
+			return if (nativeUri && prefix.isBlank()) {
+				text.subSequence(match.range.first, text.length).toString().lineSequence().first().trim()
+			} else match.value
+		}
 
 		fun latlongToAddress(latlong: String, label: String = ""): Address {
 			val splits = latlong.split(',')
@@ -62,60 +66,71 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 		}
 
 		fun parseUri(url: String): URI {
-			try {
-				return URI(url)
-			} catch (e: URISyntaxException) {
-				return URI(URLEncoder.encode(url, "UTF-8"))
-			}
+			// Preserve URI separators and existing escapes when a sender leaves spaces unescaped.
+			return URI(url.replace(Regex("[\\s<>\"{}|\\\\^`]")) {
+				URLEncoder.encode(it.value, "UTF-8").replace("+", "%20")
+			})
 		}
+
+		private fun decode(value: String): String = URLDecoder.decode(value, "UTF-8")
+
+		private fun queryParameters(rawQuery: String?): Map<String, String> = rawQuery.orEmpty()
+			.split('&').mapNotNull {
+				val parts = it.split('=', limit = 2)
+				if (parts.size == 2) decode(parts[0]) to decode(parts[1]) else null
+			}.toMap()
 	}
 
 	fun parseUrl(url: String?): Address? {
 		url ?: return null
-		if (url.startsWith("geo:")) return parseGeoUrl(url)
-		if (url.startsWith("google.navigation:")) return parseGoogleUri(url)
-		if (url.startsWith("http")) {
-			return parsePlusUrl(url) ?:
-				parseGoogleUrl(url)
+		return try {
+			val uri = parseUri(url.trim())
+			when (uri.scheme?.lowercase(Locale.ROOT)) {
+				"geo" -> parseGeoUrl(uri)
+				"google.navigation" -> parseLocation(queryParameters(uri.rawSchemeSpecificPart)["q"])
+				"http", "https" -> parsePlusUrl(uri.toString()) ?: parseGoogleUrl(uri)
+				else -> null
+			}
+		} catch (e: IllegalArgumentException) {
+			// Malformed coordinates or percent escapes are invalid destinations, not crashes.
+			null
+		} catch (e: URISyntaxException) {
+			null
+		} catch (e: IOException) {
+			// Failed short-link resolution should show the existing navigation error state.
+			null
 		}
-		return null
 	}
 
-	private fun parseGeoUrl(url: String): Address? {
-		val uri = parseUri(url)
-		val data = uri.schemeSpecificPart.replace('+', ' ')
-		val query = if (data.contains('?')) { data.split('?', limit=2)[1] } else null
-
-		val authorityResult = LATLNG_MATCHER.matchEntire(data)
-		val queryResult = LATLNG_LABEL_MATCHER.matchEntire(query ?: "")
-
-		// find a text query
-		// geo:0,0?q=1600 Amphitheatre Parkway, Mountain+View, California
-		if (query?.startsWith("q=") == true && queryResult == null) {
-			val search = query.substring(2)
-			val result = addressSearcher.search(search)
-			if (result != null) {
-				Log.i(TAG, "Parsed $search to $result")
-				return result
-			}
+	private fun parseGeoUrl(uri: URI): Address? {
+		val parts = uri.rawSchemeSpecificPart.split('?', limit = 2)
+		val query = queryParameters(parts.getOrNull(1))["q"]
+		if (!query.isNullOrBlank()) {
+			parseLocation(query)?.let { return it }
 		}
+		val coordinates = decode(parts[0]).substringBefore(';').trim()
+		val position = parseCoordinates(coordinates) ?: return null
+		// 0,0 is the placeholder used for an unresolved geo search.
+		return position.takeUnless { query != null && it.latitude == 0.0 && it.longitude == 0.0 }
+	}
 
-		// latlng in the geo url
-		val latlng = queryResult?.groupValues?.getOrNull(1) ?: authorityResult?.groupValues?.getOrNull(1)
-		val latlong = if (latlng?.contains(',') == true) {
-			val splits = latlng.split(',')
-			LatLong(splits[0].trim().toDouble(), splits[1].trim().toDouble())
-		} else null
-		if (latlong?.latitude == 0.0 && latlong.longitude == 0.0) return null
-		val label = queryResult?.groupValues?.getOrNull(4) ?: ""
-		if (latlong != null) return latlongToAddress(latlong, label)   // found a latlong
+	private fun parseCoordinates(value: String, label: String = ""): Address? {
+		val match = COORDINATES.matchEntire(value.trim()) ?: return null
+		val latitude = match.groupValues[1].toDoubleOrNull() ?: return null
+		val longitude = match.groupValues[2].toDoubleOrNull() ?: return null
+		if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+		return latlongToAddress(LatLong(latitude, longitude), match.groupValues[3].ifBlank { label })
+	}
 
-		return null
+	private fun parseLocation(value: String?): Address? {
+		val location = value?.trim()?.removePrefix("loc:")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+		if (COORDINATES.matches(location)) return parseCoordinates(location)
+		return parsePlusCode(location) ?: addressSearcher.search(location)
 	}
 
 	private fun parsePlusUrl(url: String): Address? {
-		if (!url.contains("plus.codes")) return null
 		val uri = parseUri(url)
+		if (uri.host?.lowercase(Locale.ROOT) !in setOf("plus.codes", "www.plus.codes")) return null
 		val matcher = PLUSCODE_URL_MATCHER.matchEntire(uri.path) ?: return null
 		return parsePlusCode(matcher.groupValues[1])
 	}
@@ -142,101 +157,76 @@ class NavigationParser(val addressSearcher: AddressSearcher, val redirector: URL
 		return latlongToAddress(LatLong(area.centerLatitude, area.centerLongitude))
 	}
 
-	private fun parseGoogleUri(url: String): Address? {
-		// https://developers.google.com/maps/documentation/urls/android-intents
-		// google.navigation:q=Taronga+Zoo,+Sydney+Australia
-		val uri = parseUri(url)
-		val data = uri.schemeSpecificPart.replace('+', ' ')
-		val googleQLL = GOOGLE_QLL_MATCHER.matchEntire(data)
-		if (googleQLL != null) {
-			return latlongToAddress(googleQLL.groupValues[2])
+	private fun parseGoogleUrl(original: URI): Address? {
+		var uri = original
+		val visited = mutableSetOf<String>()
+		// Resolve only Maps shorteners, including relative Location headers and redirect chains.
+		repeat(5) {
+			if (uri.host?.lowercase(Locale.ROOT) in SHORT_LINK_HOSTS) {
+				if (!visited.add(uri.toString())) return null
+				val location = redirector.tryRedirect(uri.toString()) ?: return null
+				uri = uri.resolve(parseUri(location))
+			}
 		}
+		if (uri.scheme?.lowercase(Locale.ROOT) !in setOf("http", "https")) return null
+		val host = uri.host
+		if (host != null && !GOOGLE_HOST.matches(host)) return null
 
-		val googleQ = GOOGLE_Q_MATCHER.matchEntire(data)
-		if (googleQ != null) {
-			val q = googleQ.groupValues[2]
-			val result = addressSearcher.search(q)
-			if (result != null) {
-				Log.i(TAG, "Parsed $q to $result")
-				return result
+		val query = queryParameters(uri.rawQuery)
+		// Directions endpoints outrank search text and map camera coordinates, regardless of order.
+		val destination = query["destination"] ?: query["daddr"]
+		if (destination != null) return parseLocation(destination)
+
+		val segments = uri.rawPath.orEmpty().split('/')
+		if (segments.getOrNull(1) == "maps" && segments.getOrNull(2) == "dir") {
+			val stops = segments.drop(3).takeWhile { !it.startsWith("@") && !it.startsWith("data=") }
+				.dropLastWhile { it.isBlank() }
+			// The first segment is the origin (possibly blank); use the final stop, not a waypoint.
+			if (stops.size >= 2) {
+				val finalStop = stops.last()
+				parsePlusCode(decode(finalStop.replace("+", "%2B")))?.let { return it }
+				return parseLocation(decode(finalStop))
 			}
 		}
 
-		return null
-	}
-
-	private fun parseGoogleUrl(url: String): Address? {
-		val origUri = parseUri(url)
-		// try one level of redirect
-		val uri = if (origUri.authority == "goo.gl" || origUri.authority == "maps.app.goo.gl") {
-			redirector.tryRedirect(url)?.let { parseUri(it) } ?: origUri
-		} else { origUri }
-		if (uri.authority != null && !uri.authority.contains("google")) return null
-
-		val path = uri.path?.replace('+', ' ') ?: ""
-		// https://www.google.com/maps/dir/Current+Location/47.5951518,-122.3316393
-		// http://maps.google.com/maps/place/<name>/@47.5951518,-122.3316393,15z
-		// https://www.google.com/maps/search/47.5951518,-122.3316393
-		val googlePathLL = GOOGLE_DIRPATHLL_MATCHER.matchEntire(path) ?: GOOGLE_PLACEPATHLL_MATCHER.matchEntire(path) ?: GOOGLE_SEARCHPATHLL_MATCHER.matchEntire(path)
-		if (googlePathLL != null) {
-			return latlongToAddress(googlePathLL.groupValues[2], googlePathLL.groupValues[1])
-		}
-		// https://www.google.com/maps/dir//QJQ5+XX,San%20Francisco
-		val googleOlc = GOOGLE_OLC_MATCHER.matchEntire(uri.path ?: "")
-		if (googleOlc != null) {
-			return parsePlusCode(googleOlc.groupValues[1])
+		val search = query["query"] ?: query["q"]
+		if (search != null) {
+			parseCoordinates(search.removePrefix("loc:").trim())?.let { return it }
+			// Preserve legacy Maps links that supply the searched place's coordinates in ll.
+			query["ll"]?.let { parseCoordinates(it, search)?.let { result -> return result } }
+			return parseLocation(search)
 		}
 
-		// https://www.google.com/maps/search/1970+Naglee+Ave+San+Jose,+CA
-		// https://www.google.com/maps/dir/Current+Location/1970+Naglee+Ave+San+Jose,+CA
-		val googlePath = GOOGLE_DIRPATH_MATCHER.matchEntire(path) ?:GOOGLE_PLACEPATH_MATCHER.matchEntire(path) ?: GOOGLE_SEARCHPATH_MATCHER.matchEntire(path)
-		if (googlePath != null) {
-			val result = addressSearcher.search(googlePath.groupValues[1])
-			if (result != null) {
-				Log.i(TAG, "Parsed ${googlePath.groupValues[1]} to $result")
-				return result
+		val path = uri.path.orEmpty()
+		if (segments.getOrNull(1) == "maps" && segments.getOrNull(2) in setOf("place", "search")) {
+			val name = segments.drop(3).firstOrNull { it.isNotBlank() }?.let { decode(it) }
+			if (segments[2] == "place") {
+				// Shared place links contain a pin (!3d/!4d) as well as a different @ camera center.
+				PLACE_COORDINATES.findAll(path).lastOrNull()?.let {
+					parseCoordinates("${it.groupValues[1]},${it.groupValues[2]}", name.orEmpty())?.let { result -> return result }
+				}
+				segments.firstOrNull { it.startsWith("@") }?.let { camera ->
+					COORDINATE_PREFIX.find(decode(camera.removePrefix("@")))?.groupValues?.get(1)?.let {
+						parseCoordinates(it, name.orEmpty())?.let { result -> return result }
+					}
+				}
 			}
+			return parseLocation(name)
 		}
-
-		val query = uri.query?.replace('+', ' ') ?: ""
-
-		// https://developers.google.com/maps/documentation/urls/get-started
-		// https://www.google.com/maps/search/?api=1&query=47.5951518,-122.3316393
-		// https://www.google.com/maps/dir/?api=1&destination=47.5951518,-122.3316393
-		val googleQueryLL = GOOGLE_QUERYLL_MATCHER.matchEntire(query)
-		val googleQuery = GOOGLE_QUERY_MATCHER.matchEntire(query)
-		if (googleQueryLL != null) {
-			return latlongToAddress(googleQueryLL.groupValues[4], "")
-		}
-
-		// some urls can include an &ll parameter, use that instead of conducting a search
-		// http://maps.google.com/maps?q=1970+Naglee+Ave+San+Jose,+CA+95126&ie=UTF8&hl=en&hq=&hnear=1970+Naglee+Ave,+San+Jose,+Santa+Clara,+California+95126&ll=37.335378,-121.931098&spn=0,359.967062&z=16&layer=c&cbll=37.328304,-121.931342&panoid=kfyFC9pOgbTvYFIkHYnsMQ&cbp=12,193.03,,0,2.36
-		// http://maps.google.com/maps?q=loc:47.5951518,-122.3316393&z=15
-		val googleLL = GOOGLE_LL_MATCHER.matchEntire(query)
-		if (googleLL != null) {
-			return latlongToAddress(googleLL.groupValues[2], googleQuery?.groupValues?.getOrNull(3) ?: "")
-		}
-
-		// https://developers.google.com/maps/documentation/urls/get-started
-		// https://www.google.com/maps/search/?api=1&query=pizza+seattle+wa
-		// https://www.google.com/maps/dir/?api=1&destination=pizza+seattle+wa
-		if (googleQuery != null) {
-			val result = addressSearcher.search(googleQuery.groupValues[3])
-			if (result != null) {
-				Log.i(TAG, "Parsed ${googleQuery.groupValues[3]} to $result")
-				return result
-			}
-		}
-
-		return null
+		return query["ll"]?.let { parseCoordinates(it) }
 	}
 }
 
 class URLRedirector {
 	fun tryRedirect(url: String): String? {
-		val parsed = URL(url)
-		val connection = parsed.openConnection() as? HttpURLConnection
-		connection?.instanceFollowRedirects = false
-		return connection?.getHeaderField("Location")
+		val connection = URL(url).openConnection() as? HttpURLConnection ?: return null
+		return try {
+			connection.instanceFollowRedirects = false
+			connection.connectTimeout = 5000
+			connection.readTimeout = 5000
+			if (connection.responseCode in 300..399) connection.getHeaderField("Location") else null
+		} finally {
+			connection.disconnect()
+		}
 	}
 }

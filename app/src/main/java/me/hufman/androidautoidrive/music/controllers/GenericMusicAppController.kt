@@ -2,13 +2,18 @@ package me.hufman.androidautoidrive.music.controllers
 
 import android.content.Context
 import android.os.DeadObjectException
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.view.KeyEvent
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import me.hufman.androidautoidrive.music.*
@@ -53,7 +58,10 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 		}
 	}
 	val TAG = "GenericMusicController"
-	var connected = true
+	@Volatile var connected = true
+	private val backgroundJob = SupervisorJob()
+	private var spotifyRefreshJob: Job? = null
+	private var lastSpotifyRefreshTime: Long? = null
 	var callback: ((MusicAppController) -> Unit)? = null    // UI listener
 
 	private inline fun remoteCall(runnable: () -> Unit) {
@@ -171,10 +179,27 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 			controllerQueueTitle, controllerQueue
 	)
 
+	private var lastQueueItems: List<MediaSessionCompat.QueueItem>? = null
+	private var parsedQueue: QueueMetadata? = null
+
+	private fun clearQueueCache() {
+		lastQueueItems = null
+		parsedQueue = null
+	}
+
 	override fun getQueue(): QueueMetadata? {
 		triggerSpotifyWorkaround()
 		return remoteData {
-			QueueMetadata(controllerQueueTitle.value?.toString(), null, controllerQueue.value?.map { MusicMetadata.fromQueueItem(it) })
+			val queueItems = controllerQueue.value
+			val queueTitle = controllerQueueTitle.value?.toString()
+			if (parsedQueue == null || lastQueueItems != queueItems) {
+				// QueueItems are immutable, but retain our own list to detect in-place list changes.
+				lastQueueItems = queueItems?.toList()
+				parsedQueue = QueueMetadata(queueTitle, null, queueItems?.map { MusicMetadata.fromQueueItem(it) })
+			} else if (parsedQueue?.title != queueTitle) {
+				parsedQueue = parsedQueue?.copy(title = queueTitle)
+			}
+			parsedQueue
 		}
 	}
 
@@ -257,11 +282,20 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 	 * Spotify does not post the queue or custom actions to the MediaSession normally
 	 * Instead, it only updates the queue and custom actions as part of a browse loadChildren
 	 */
-	private fun triggerSpotifyWorkaround() {
+	@Synchronized private fun triggerSpotifyWorkaround() {
 		// spotify needs a browse to update metadata, such as queue and custom actions
-		if (musicBrowser?.musicAppInfo?.packageName == "com.spotify.music" && musicBrowser.connected) {
-			GlobalScope.launch(musicBrowser.handler.asCoroutineDispatcher()) {
-				musicBrowser.browse(null, 200)
+		if (connected && musicBrowser?.musicAppInfo?.packageName == "com.spotify.music" && musicBrowser.connected) {
+			val now = SystemClock.elapsedRealtime()
+			if (spotifyRefreshJob?.isActive == true || lastSpotifyRefreshTime?.let { now - it < 5000 } == true) return
+			lastSpotifyRefreshTime = now
+			spotifyRefreshJob = CoroutineScope(backgroundJob + musicBrowser.handler.asCoroutineDispatcher()).launch {
+				try {
+					musicBrowser.browse(null, 200)
+				} catch (e: CancellationException) {
+					throw e
+				} catch (e: Exception) {
+					Log.d(TAG, "Unable to refresh Spotify session: ${e.message}")
+				}
 			}
 		}
 	}
@@ -293,9 +327,12 @@ class GenericMusicAppController(val context: Context, val mediaController: Media
 
 	private fun disconnectController() {
 		this.connected = false
+		backgroundJob.cancel()
+		spotifyRefreshJob = null
+		clearQueueCache()
+		allControllerCaches.forEach { it.enabled = false }
 		try {
 			mediaController.unregisterCallback(this.controllerCallback)
-			allControllerCaches.forEach { it.enabled = false }
 		} catch (e: Exception) {}
 		try {
 			musicBrowser?.disconnect()

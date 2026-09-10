@@ -16,9 +16,10 @@ import java.lang.Runnable
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 
-class MusicController(val context: Context, val handler: Handler): CoroutineScope {
+class MusicController(val context: Context, val handler: Handler,
+                      private val dispatcher: CoroutineDispatcher = handler.asCoroutineDispatcher()): CoroutineScope {
 	override val coroutineContext: CoroutineContext
-		get() = handler.asCoroutineDispatcher()
+		get() = dispatcher
 
 	// async jobs
 	var browseJob: Job? = null
@@ -129,7 +130,9 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 				if (controller == null) {
 					Log.e(TAG, "Unable to connect to CombinedMusicAppController, this should never happen")
 				} else {
+					currentAppController = controller
 					controller.subscribe {
+						if (currentAppController !== controller) return@subscribe
 						if (controller.isConnected() && desiredPlayback && !triggeredPlayback) {
 							if (triggeredAttempts < 10) {
 								if (controller.getPlaybackPosition().isPaused) {
@@ -148,7 +151,6 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 						}
 						scheduleRedraw()
 					}
-					currentAppController = controller
 					Log.i(TAG, "Successful connection to $currentAppController")
 					saveDesiredApp(app)
 					scheduleRedrawProgress()        // start up repeating redraw
@@ -173,14 +175,21 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 
 	fun disconnectApp(pause: Boolean = true) {
 		Log.d(TAG, "Disconnecting $currentAppController")
+		browseJob?.cancel()
+		searchJob?.cancel()
+		browseJob = null
+		searchJob = null
 		// trigger a pause of the current connected app
 		if (pause) {
 			pauseSync()
 		}
 
 		// then clear out the saved controller object, to defer future play() calls
-		currentAppController?.disconnect()
+		val previousController = currentAppController
 		currentAppController = null
+		previousController?.disconnect()
+		handler.removeCallbacks(redrawTask)
+		handler.removeCallbacks(redrawProgressTask)
 	}
 
 	/* Controls */
@@ -196,9 +205,9 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 	fun playFromSearch(search: String) = asyncControl { controller ->
 		controller.playFromSearch(search)
 	}
-	fun pause() = asyncControl { controller ->
+	fun pause() {
 		desiredPlayback = false
-		controller.pause()
+		asyncControl { controller -> controller.pause() }
 	}
 	fun pauseSync() = withController { controller -> // all calls are already in the handler thread, don't go async
 		controller.pause()
@@ -280,25 +289,35 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 	}
 
 	fun browseAsync(directory: MusicMetadata?): Deferred<List<MusicMetadata>> {
-		val results: CompletableDeferred<List<MusicMetadata>> = CompletableDeferred()
-		withController { controller ->
-			browseJob?.cancel()
-			browseJob = launch {
-				results.complete(controller.browse(directory))
+		browseJob?.cancel()
+		browseJob = null
+		val controller = currentAppController ?: return CompletableDeferred(emptyList())
+		return async {
+			try {
+				controller.browse(directory)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				Log.w(TAG, "Unable to browse music app", e)
+				emptyList()
 			}
-		}
-		return results
+		}.also { browseJob = it }
 	}
 
 	fun searchAsync(query: String): Deferred<List<MusicMetadata>?> {
-		val results: CompletableDeferred<List<MusicMetadata>?> = CompletableDeferred()
-		withController { controller ->
-			searchJob?.cancel()
-			searchJob = launch {
-				results.complete(controller.search(query))
+		searchJob?.cancel()
+		searchJob = null
+		val controller = currentAppController ?: return CompletableDeferred<List<MusicMetadata>?>().apply { complete(null) }
+		return async {
+			try {
+				controller.search(query)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				Log.w(TAG, "Unable to search music app", e)
+				null
 			}
-		}
-		return results
+		}.also { searchJob = it }
 	}
 
 	/* Current state */
@@ -354,6 +373,7 @@ class MusicController(val context: Context, val handler: Handler): CoroutineScop
 		assertPlayingMetadata()
 	}
 	fun scheduleRedrawProgress() {
+		handler.removeCallbacks(redrawProgressTask)
 		if (currentAppController == null) {
 			return
 		}

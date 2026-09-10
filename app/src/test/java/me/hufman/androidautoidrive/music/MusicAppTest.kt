@@ -1039,7 +1039,7 @@ class MusicAppTest {
 		app.loadFromXML(carAppResources.getUiDescription()?.readBytes() as ByteArray)
 		val state = app.states[IDs.QUEUE_STATE] as RHMIState.PlainState
 		val queueView = EnqueuedView(state, musicController, graphicsHelpers, MusicImageIDsMultimedia)
-		val mockMusicMetadata2: MusicMetadata = mock()
+		val mockMusicMetadata2 = spy(MusicMetadata(queueId = 15, title = "Song 2", artist = "Artist 2", mediaId = "mediaId2"))
 		val musicMetadata1 = MusicMetadata(queueId=10, title="Song 1", artist="Artist 1", mediaId = "mediaId1")
 		val musicMetadata3 = MusicMetadata(queueId=20, title="Song 3", artist="Artist 3", mediaId = "mediaId3")
 		whenever(musicController.getQueue()) doAnswer { QueueMetadata(null, null, listOf(
@@ -1078,6 +1078,37 @@ class MusicAppTest {
 		assertEquals(song2CoverArtImage, song2Row[1])
 		assertEquals("", song2Row[2])
 		assertEquals(song2Title+"\n"+song2Artist, song2Row[3])
+
+		val updateCount = mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size
+		queueView.redraw()
+		assertEquals(updateCount, mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size)
+		verify(graphicsHelpers, times(1)).compress(coverArt, 90, 90, quality = 30)
+	}
+
+	@Test
+	fun testQueueRedrawDoesNotRepeatForStableSubclassArtwork() {
+		val mockServer = MockBMWRemotingServer()
+		val app = RHMIApplicationEtch(mockServer, 1)
+		app.loadFromXML(carAppResources.getUiDescription()?.readBytes() as ByteArray)
+		val state = app.states[IDs.QUEUE_STATE] as RHMIState.PlainState
+		val queueView = EnqueuedView(state, musicController, graphicsHelpers, MusicImageIDsMultimedia)
+		var artwork: Bitmap? = null
+		val song = object: MusicMetadata(queueId = 10, title = "Song") {
+			override val coverArt: Bitmap? get() = artwork
+		}
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = listOf(song))
+		whenever(musicController.getMetadata()) doReturn song
+		queueView.show()
+		queueView.listComponent.requestDataCallback?.onRequestData(0, 10)
+		val initialUpdates = mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size
+		queueView.redraw()
+		assertEquals(initialUpdates, mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size)
+		artwork = mock()
+		queueView.redraw()
+		val artworkUpdates = mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size
+		assertEquals(initialUpdates + 1, artworkUpdates)
+		queueView.redraw()
+		assertEquals(artworkUpdates, mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size)
 	}
 
 	@Test
@@ -1087,7 +1118,7 @@ class MusicAppTest {
 		app.loadFromXML(carAppResources.getUiDescription()?.readBytes() as ByteArray)
 		val state = app.states[IDs.QUEUE_STATE] as RHMIState.PlainState
 		val queueView = EnqueuedView(state, musicController, graphicsHelpers, MusicImageIDsMultimedia)
-		val mockMusicMetadata2: MusicMetadata = mock()
+		val mockMusicMetadata2 = spy(MusicMetadata(queueId = 15, title = "Song 2", artist = "Artist 2", mediaId = "mediaId2"))
 		val musicMetadata1 = MusicMetadata(queueId=10, title="Song 1", artist="Artist 1", mediaId = "mediaId1")
 		val musicMetadata3 = MusicMetadata(queueId=20, title="Song 3", artist="Artist 3", mediaId = "mediaId3")
 		whenever(musicController.getQueue()) doAnswer { QueueMetadata(null, null, listOf(
@@ -1106,7 +1137,9 @@ class MusicAppTest {
 		// trigger the request data callback
 		app.components[IDs.QUEUE_LIST_COMPONENT]?.requestDataCallback?.onRequestData(0, 10)
 
+		val updateCount = mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size
 		queueView.redraw()
+		assertEquals(updateCount, mockServer.listData[IDs.QUEUE_LIST_MODEL]!!.size)
 
 		val queueList = mockServer.data[IDs.QUEUE_LIST_MODEL] as BMWRemoting.RHMIDataTable
 		val song2Row = queueList.data[1]
@@ -1144,6 +1177,45 @@ class MusicAppTest {
 		verify(musicController, never()).playQueue(any())
 		state.components[IDs.QUEUE_LIST_COMPONENT]?.asList()?.getAction()?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 1))
 		verify(musicController).playQueue(MusicMetadata(queueId=15, title=song2Title, artist = song2Artist))
+	}
+
+	@Test
+	fun testAudioStateSkipsUnchangedRenderingButKeepsActionExtrasFresh() {
+		val mockServer = MockBMWRemotingServer()
+		val app = RHMIApplicationEtch(mockServer, 1)
+		app.loadFromXML(this.javaClass.classLoader!!.getResourceAsStream("ui_description_multimedia_v3.xml")!!.readBytes())
+		val state = app.states[IDs.AUDIO_STATE] as RHMIState.AudioHmiState
+		val playbackView = PlaybackView(state, musicController, mapOf(), phoneAppResources, graphicsHelpers, MusicImageIDsSpotify, mock())
+		val observedSong = spy(MusicMetadata(queueId = 149, mediaId = "song-149", title = "Song 149"))
+		val songs = (0 until 149).map { MusicMetadata(queueId = it.toLong(), title = "Song $it") } + observedSong
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = songs)
+		whenever(musicController.getMetadata()) doReturn songs[75]
+		playbackView.initWidgetsLater()
+		playbackView.show()
+		val updateCount = mockServer.listData[IDs.AUDIOSTATE_PLAYLIST_MODEL]!!.size
+		clearInvocations(observedSong)
+		playbackView.redraw()
+		assertEquals(updateCount, mockServer.listData[IDs.AUDIOSTATE_PLAYLIST_MODEL]!!.size)
+		verify(observedSong, never()).title
+
+		// A loading spinner or scrolling title must refresh the active row without rebuilding others.
+		whenever(musicController.getPlaybackPosition()) doReturn PlaybackPosition(false, true, 0, 1000, 180000)
+		playbackView.redraw()
+		assertEquals(true, (mockServer.data[IDs.AUDIOSTATE_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data[75][0])
+		playbackView.trackTextScroller = mock {
+			on { getText() } doReturn "Scrolled title"
+		}
+		playbackView.redraw()
+		assertEquals("Scrolled title", (mockServer.data[IDs.AUDIOSTATE_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data[75][2])
+		verify(observedSong, never()).title
+		val refreshedUpdateCount = mockServer.listData[IDs.AUDIOSTATE_PLAYLIST_MODEL]!!.size
+
+		val replacement = MusicMetadata(queueId = 149, mediaId = "song-149", title = "Song 149", coverArt = mock(), extras = mock())
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = songs.dropLast(1) + replacement)
+		playbackView.redraw()
+		assertEquals(refreshedUpdateCount, mockServer.listData[IDs.AUDIOSTATE_PLAYLIST_MODEL]!!.size)
+		state.getPlayListAction()?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 149))
+		verify(musicController).playQueue(same(replacement))
 	}
 
 	@Test
@@ -1324,6 +1396,38 @@ class MusicAppTest {
 		val missingList = mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable
 		assertArrayEquals(arrayOf("Song 3", "Song 6"), missingList.data.map {it[1]}.toTypedArray())
 		assertArrayEquals(arrayOf(0, 0), missingList.data.map {it[5]}.toTypedArray())
+	}
+
+	@Test
+	fun testInstrumentClusterDoesNotResendPlaylistForArtworkOnlyChanges() {
+		val mockServer = MockBMWRemotingServer()
+		val app = RHMIApplicationEtch(mockServer, 1)
+		app.loadFromXML(carAppResources.getUiDescription()?.readBytes() as ByteArray)
+		val globalState = GlobalMetadata(app, musicController)
+		val first = MusicMetadata(mediaId = "first", queueId = 1, title = "First")
+		val second = MusicMetadata(mediaId = "second", queueId = 2, title = "Second")
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = listOf(first, second))
+		whenever(musicController.getMetadata()) doReturn first
+		globalState.initWidgets()
+		globalState.redraw()
+		val updateCount = mockServer.listData[IDs.IC_PLAYLIST_MODEL]!!.size
+		mockServer.triggeredEvents.clear()
+
+		val updatedArtwork = MusicMetadata(mediaId = "first", queueId = 1, title = "First", coverArt = mock(), extras = mock())
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = listOf(updatedArtwork, second))
+		whenever(musicController.getMetadata()) doReturn updatedArtwork
+		globalState.redraw()
+		assertEquals(updateCount, mockServer.listData[IDs.IC_PLAYLIST_MODEL]!!.size)
+		assertTrue(mockServer.triggeredEvents.isEmpty())
+		app.actions[IDs.IC_TRACK_ACTION]?.asRAAction()?.rhmiActionCallback?.onActionEvent(mapOf(1.toByte() to 0))
+		verify(musicController).playQueue(same(updatedArtwork))
+
+		val updatedTitle = MusicMetadata(mediaId = "first", queueId = 1, title = "Updated title")
+		whenever(musicController.getQueue()) doReturn QueueMetadata(songs = listOf(updatedTitle, second))
+		whenever(musicController.getMetadata()) doReturn updatedTitle
+		globalState.redraw()
+		assertEquals(updateCount + 1, mockServer.listData[IDs.IC_PLAYLIST_MODEL]!!.size)
+		assertEquals("Updated title", (mockServer.data[IDs.IC_PLAYLIST_MODEL] as BMWRemoting.RHMIDataTable).data[0][1])
 	}
 
 	@Test

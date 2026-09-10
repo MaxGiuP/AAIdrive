@@ -30,8 +30,7 @@ class NavigationSearchController(val scope: CoroutineScope, val parser: Navigati
 
 	@Suppress("BlockingMethodInNonBlockingContext")
 	fun startNavigation(result: MapResult) {
-		job?.cancel()   // cancel a previous search or pending state
-		job = scope.launch(dispatchers.Main) {
+		launchNavigation {
 			// show that we are searching while resolving the full MapResult
 			navigationStatusModel.isSearching.value = true
 			navigationStatusModel.searchStatus.value = { getString(R.string.lbl_navigation_listener_searching) }
@@ -51,18 +50,44 @@ class NavigationSearchController(val scope: CoroutineScope, val parser: Navigati
 			val query = if (expandedResult.location != null) {
 				"geo:0,0?q=${expandedResult.location.latitude},${expandedResult.location.longitude}+%28${URLEncoder.encode(expandedResult.toString(),"UTF-8")}%29"
 			} else {
-				"geo:0,0?q=${URLEncoder.encode(result.address, "UTF-8")}"
+				val address = expandedResult.address?.takeIf { it.isNotBlank() }
+					?: result.address?.takeIf { it.isNotBlank() }
+				requireNotNull(address) { "The selected place has no coordinates or address" }
+				"geo:0,0?q=${URLEncoder.encode(address, "UTF-8")}"
 			}
 			startNavigationUpdates(query)
 		}
 	}
 
 	fun startNavigation(query: CharSequence): Boolean {
-		job?.cancel()   // cancel a previous search or pending state
-		job = scope.launch(dispatchers.Main) {
-			startNavigationUpdates(query)
-		}
+		launchNavigation { startNavigationUpdates(query) }
 		return false    // hide the keyboard after clicking the search button
+	}
+
+	private fun launchNavigation(block: suspend () -> Unit) {
+		val previousJob = job
+		previousJob?.cancel()
+		job = scope.launch(dispatchers.Main) {
+			// Finish the old request's cleanup before it can overwrite the new request's spinner.
+			previousJob?.join()
+			runNavigation(block)
+		}
+	}
+
+	/** Always finish the spinner after a failed lookup; cancellation still belongs to the caller. */
+	private suspend fun runNavigation(block: suspend () -> Unit) {
+		try {
+			block()
+		} catch (e: CancellationException) {
+			throw e
+		} catch (e: Exception) {
+			navigationStatusModel.searchStatus.value = { getString(R.string.lbl_navigation_listener_parsefailure) }
+			navigationStatusModel.searchFailed.value = true
+		} finally {
+			navigationStatusModel.isSearching.value = false
+		}
+		delay(SUCCESS)
+		navigationStatusModel.searchStatus.value = { "" }
 	}
 
 	/**
@@ -92,20 +117,17 @@ class NavigationSearchController(val scope: CoroutineScope, val parser: Navigati
 				navigationStatusModel.searchStatus.value = { getString(R.string.lbl_navigation_listener_unsuccess) }
 			}
 		}
-
-		// clear the progress text
-		navigationStatusModel.isSearching.value = false
-		delay(SUCCESS)
-		navigationStatusModel.searchStatus.value = { "" }
 	}
 
 	suspend fun searchAddress(query: CharSequence): Address? {
-		val url = if (query.startsWith("geo:") ||
-				query.startsWith("google.navigation:") ||
-				query.startsWith("http")) {
-			query
+		val trimmedQuery = query.toString().trim()
+		val url = if (trimmedQuery.startsWith("geo:", true) ||
+				trimmedQuery.startsWith("google.navigation:", true) ||
+				trimmedQuery.startsWith("http", true)) {
+			trimmedQuery
 		} else {
-			"geo:0,0?q=${URLEncoder.encode(query.toString(), "UTF-8")}"
+			NavigationParser.extractUrl(trimmedQuery)
+				?: "geo:0,0?q=${URLEncoder.encode(trimmedQuery, "UTF-8")}"
 		}
 
 		val result = withContext(dispatchers.IO) {

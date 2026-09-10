@@ -6,6 +6,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.MutableLiveData
 import com.google.gson.JsonObject
 import org.mockito.kotlin.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runBlockingTest
 import me.hufman.androidautoidrive.CarInformation
@@ -19,6 +20,7 @@ import me.hufman.androidautoidrive.phoneui.viewmodels.NavigationStatusModel
 import io.bimmergestalt.idriveconnectkit.CDS
 import kotlinx.coroutines.test.advanceTimeBy
 import me.hufman.androidautoidrive.maps.MapPlaceSearch
+import me.hufman.androidautoidrive.maps.MapResult
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -166,4 +168,58 @@ class NavigationSearchControllerTest {
 		assertEquals("", context.run(model.searchStatus.value!!))
 		verify(context, never()).getString(any())
 	}
+	@Test
+	fun expandedResultUsesItsResolvedAddress() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(searcher.resultInformationAsync("place")).thenReturn(CompletableDeferred(MapResult("place", "Museum", "Resolved address")))
+		controller.startNavigation(MapResult("place", "Museum"))
+		verify(parser, times(2)).parseUrl("geo:0,0?q=Resolved+address")
+		assertEquals(false, model.isSearching.value)
+	}
+
+	@Test
+	fun missingPlaceDetailsShowsFailureAndStopsSpinner() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(searcher.resultInformationAsync("place")).thenReturn(CompletableDeferred<MapResult?>().apply { complete(null) })
+		controller.startNavigation(MapResult("place", "Museum"))
+		assertEquals(false, model.isSearching.value)
+		assertEquals(true, model.searchFailed.value)
+		verifyNoInteractions(navigationTrigger, parser)
+	}
+
+	@Test
+	fun parserExceptionShowsFailureAndStopsSpinner() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(parser.parseUrl(any())).thenThrow(IllegalArgumentException("Malformed destination"))
+		controller.startNavigation("bad address")
+		assertEquals(false, model.isSearching.value)
+		assertEquals(true, model.searchFailed.value)
+		verifyNoInteractions(navigationTrigger)
+	}
+
+	@Test
+	fun cancellationStopsSpinnerWithoutReportingFailure() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		whenever(searcher.resultInformationAsync("place")).thenReturn(CompletableDeferred<MapResult?>())
+		controller.startNavigation(MapResult("place", "Museum"))
+		assertEquals(true, model.isSearching.value)
+		controller.job!!.cancel()
+		testScheduler.runCurrent()
+		assertEquals(false, model.isSearching.value)
+		assertEquals(false, model.searchFailed.value)
+		verifyNoInteractions(navigationTrigger, parser)
+	}
+
+	@Test
+	fun pastedMultilineShareUsesItsLink() = coroutineTestRule.testDispatcher.runBlockingTest {
+		val model = NavigationStatusModel(carInformation, MutableLiveData(false), MutableLiveData(false), MutableLiveData(null))
+		val controller = NavigationSearchController(this, parser, searcher, navigationTrigger, model, coroutineTestRule.testDispatcherProvider)
+		controller.startNavigation("Museum\nhttps://maps.app.goo.gl/example\nShared place")
+		verify(parser, times(2)).parseUrl("https://maps.app.goo.gl/example")
+	}
+
 }

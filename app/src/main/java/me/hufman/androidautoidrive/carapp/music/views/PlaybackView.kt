@@ -77,7 +77,12 @@ class PlaybackView(val state: RHMIState, val controller: MusicController, val ca
 	var lastPositionActionTime: Long = 0
 	private var audioStateQueue: List<MusicMetadata> = emptyList()
 	private var audioStateCurrentSong: MusicMetadata? = null
-	private var audioStatePlaylistRows: List<List<Any>> = emptyList()
+	private var audioStatePlaylistInitialized = false
+	private var audioStatePlaylistTitle: String? = null
+	private var audioStatePlaylistBuffering = false
+	private var audioStatePlaylistSkipBack = true
+	private var audioStatePlaylistSkipNext = true
+	private var audioStatePlaylistRows: List<Array<Any>> = emptyList()
 	private val audioStateCurrentSongIcon = BMWRemoting.RHMIResourceIdentifier(BMWRemoting.RHMIResourceType.IMAGEID, musicImageIDs.CHECKMARK)
 
 	var artistTextScroller: TextScroller = TextScroller("", 0)
@@ -336,6 +341,7 @@ class PlaybackView(val state: RHMIState, val controller: MusicController, val ca
 	fun forgetDisplayedInfo() {
 		displayedApp = null
 		displayedSong = null
+		audioStatePlaylistInitialized = false
 		audioStatePlaylistRows = emptyList()
 		audioStateQueue = emptyList()
 		audioStateCurrentSong = null
@@ -475,17 +481,37 @@ class PlaybackView(val state: RHMIState, val controller: MusicController, val ca
 
 	private fun redrawAudiostatePlaylist(title: String) {
 		if (state is RHMIState.AudioHmiState) {
-			val playlistModel = state.getPlayListModel()?.asRaListModel()
-			val playlist = RHMIModel.RaListModel.RHMIListConcrete(10)
 			val songs = controller.getQueue()?.songs.orEmpty()
 			val currentSong = controller.getMetadata()
+			val queueChanged = !audioStateQueue.hasSameQueueDescriptions(songs)
+			val currentChanged = !(audioStateCurrentSong === currentSong ||
+					audioStateCurrentSong?.matchesQueueItem(currentSong) == true ||
+					audioStateCurrentSong?.hasSameQueueDescription(currentSong) == true)
+			val controlsChanged = songs.isEmpty() &&
+					(audioStatePlaylistSkipBack != skipBackEnabled || audioStatePlaylistSkipNext != skipNextEnabled)
+			val needsRedraw = !audioStatePlaylistInitialized || queueChanged || currentChanged || controlsChanged ||
+					audioStatePlaylistTitle != title || audioStatePlaylistBuffering != isBuffering
+			if (!needsRedraw) {
+				// Preserve current action extras when replacing objects did not alter visible rows.
+				if (!audioStateQueue.hasSameQueueItems(songs)) audioStateQueue = songs.toList()
+				audioStateCurrentSong = currentSong
+				return
+			}
+
+			val playlistModel = state.getPlayListModel()?.asRaListModel()
+			val playlist = RHMIModel.RaListModel.RHMIListConcrete(10)
 			val rows = if (songs.isNotEmpty()) {
-				songs.map { song ->
-					val isCurrent = song.matchesQueueItem(currentSong)
-					PlaylistItem(isBuffering && isCurrent, song.queueId != null || !song.mediaId.isNullOrBlank(),
-						if (isCurrent) audioStateCurrentSongIcon else grayscaleNoteIcon,
-						UnicodeCleaner.clean(if (isCurrent) title else song.title.orEmpty()),
-						UnicodeCleaner.clean(song.artist ?: song.subtitle.orEmpty()))
+				if (!audioStatePlaylistInitialized || queueChanged) {
+					songs.map { audioStatePlaylistRow(it, currentSong, title) }
+				} else {
+					// Scrolling titles and buffering only affect current/previous rows; reuse all others.
+					audioStatePlaylistRows.toMutableList().also { updated ->
+						songs.forEachIndexed { index, song ->
+							if (song.matchesQueueItem(currentSong) || song.matchesQueueItem(audioStateCurrentSong)) {
+								updated[index] = audioStatePlaylistRow(song, currentSong, title)
+							}
+						}
+					}
 				}
 			} else {
 				listOf(
@@ -494,20 +520,29 @@ class PlaybackView(val state: RHMIState, val controller: MusicController, val ca
 					PlaylistItem(false, skipNextEnabled, BMWRemoting.RHMIResourceIdentifier(BMWRemoting.RHMIResourceType.IMAGEID, musicImageIDs.SKIP_NEXT), L.MUSIC_SKIP_NEXT)
 				)
 			}
-			// AudioHmiState does not cache this model: avoid resending a large unchanged playlist.
-			val rowValues = rows.map { it.toList() }
-			if (audioStatePlaylistRows != rowValues) {
-				rows.forEach { playlist.addRow(it) }
-				playlistModel?.value = playlist
-				audioStatePlaylistRows = rowValues
-			}
-			if (audioStateQueue != songs || audioStateCurrentSong != currentSong || audioStateQueue.isEmpty()) {
+			rows.forEach { playlist.addRow(it) }
+			playlistModel?.value = playlist
+			audioStatePlaylistRows = rows
+			if (!audioStatePlaylistInitialized || queueChanged || currentChanged) {
 				val currentIndex = if (songs.isEmpty()) 1 else songs.indexOfFirst { it.matchesQueueItem(currentSong) }.coerceAtLeast(0)
 				state.getPlayListFocusRowModel()?.asRaIntModel()?.value = currentIndex
 			}
-			audioStateQueue = songs.toList()
+			if (!audioStateQueue.hasSameQueueItems(songs)) audioStateQueue = songs.toList()
 			audioStateCurrentSong = currentSong
+			audioStatePlaylistInitialized = true
+			audioStatePlaylistTitle = title
+			audioStatePlaylistBuffering = isBuffering
+			audioStatePlaylistSkipBack = skipBackEnabled
+			audioStatePlaylistSkipNext = skipNextEnabled
 		}
+	}
+
+	private fun audioStatePlaylistRow(song: MusicMetadata, currentSong: MusicMetadata?, title: String): Array<Any> {
+		val isCurrent = song.matchesQueueItem(currentSong)
+		return PlaylistItem(isBuffering && isCurrent, song.queueId != null || !song.mediaId.isNullOrBlank(),
+			if (isCurrent) audioStateCurrentSongIcon else grayscaleNoteIcon,
+			UnicodeCleaner.clean(if (isCurrent) title else song.title.orEmpty()),
+			UnicodeCleaner.clean(song.artist ?: song.subtitle.orEmpty()))
 	}
 
 	private fun showPlaceholderCoverart() {

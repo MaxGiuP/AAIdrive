@@ -8,6 +8,8 @@ import me.hufman.androidautoidrive.music.MusicAction
 import me.hufman.androidautoidrive.music.MusicAppInfo
 import me.hufman.androidautoidrive.music.MusicController
 import me.hufman.androidautoidrive.music.MusicMetadata
+import me.hufman.androidautoidrive.music.hasSameQueueDescriptions
+import me.hufman.androidautoidrive.music.hasSameQueueItems
 import java.io.IOException
 
 class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
@@ -49,21 +51,25 @@ class GlobalMetadata(app: RHMIApplication, var controller: MusicController) {
 		}
 
 		val song = controller.getMetadata()
-		if (song != null && song != displayedSong) {
+		val songChanged = !(displayedSong === song || displayedSong?.hasSameQueueDescription(song) == true)
+		if (song != null && songChanged) {
 			showSong(song)
 		}
 
 		val queue = controller.getQueue()?.songs
-		if (queue != displayedQueue || song != displayedSong) {
-			val icQueue = prepareQueue(queue, song)
+		val queueChanged = !displayedQueue.hasSameQueueDescriptions(queue)
+		if (queueChanged || songChanged) {
+			icQueue = prepareQueue(queue, song)
 			showQueue(icQueue, song)
-			this.icQueue = icQueue
 			hasPublishedQueue = !queue.isNullOrEmpty()
+		} else if (!displayedQueue.hasSameQueueItems(queue) && !queue.isNullOrEmpty()) {
+			// Artwork or action extras may change without requiring a playlist transmission.
+			icQueue = queue.toList()
 		}
 
 		displayedApp = app
 		displayedSong = song
-		displayedQueue = queue
+		if (!displayedQueue.hasSameQueueItems(queue)) displayedQueue = queue?.toList()
 	}
 
 	private fun showApp(app: MusicAppInfo) {

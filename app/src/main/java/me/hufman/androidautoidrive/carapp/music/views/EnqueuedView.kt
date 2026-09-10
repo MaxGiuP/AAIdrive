@@ -41,6 +41,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 	var queueMetadata: QueueMetadata? = null
 	var visibleRows: List<MusicMetadata> = emptyList()
 	var visibleRowsOriginalMusicMetadata: List<MusicMetadata> = emptyList()
+	private var visibleRowsStartIndex = 0
 	var selectedIndex: Int = 0
 
 	var songsListAdapter = object: RHMIModel.RaListModel.RHMIListAdapter<MusicMetadata>(4, songsList) {
@@ -136,6 +137,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 
 				val start = startIndex.coerceIn(0, songsList.size)
 				val end = start + numRows.coerceIn(0, songsList.size - start)
+				visibleRowsStartIndex = start
 				visibleRows = songsListAdapter.realData.subList(start, end).toMutableList()
 				visibleRowsOriginalMusicMetadata = visibleRows.map { MusicMetadata.copy(it) }
 			}
@@ -188,9 +190,12 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 
 		// redraw all currently visible rows if one of them has a cover art that was retrieved
 		for ((index, metadata) in visibleRowsOriginalMusicMetadata.withIndex()) {
-			if (metadata != visibleRows[index]) {
-				// can only see roughly 5 rows
-				showList(max(0, selectedIndex - 4), 8)
+			val current = visibleRows[index]
+			// Snapshots are base MusicMetadata even when an app supplies a specialized subclass.
+			if (!metadata.hasSameQueueDescription(current) || metadata.coverArt !== current.coverArt ||
+					metadata.coverArtUri != current.coverArtUri) {
+				showList(visibleRowsStartIndex, visibleRows.size)
+				visibleRowsOriginalMusicMetadata = visibleRows.map { MusicMetadata.copy(it) }
 				break
 			}
 		}
@@ -230,7 +235,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 	private fun showList(startIndex: Int = 0, numRows: Int = 10) {
 		if (startIndex < 0 || startIndex > songsList.size || numRows < 0) return
 		val endIndex = startIndex + min(numRows, songsList.size - startIndex)
-		val updatedList = ArrayList(songsList.subList(startIndex, endIndex))
+		val updatedList = songsList.subList(startIndex, endIndex)
 		if (updatedList.any {it.coverArt != null || it.coverArtUri != null}) {
 			listComponent.setProperty(RHMIProperty.PropertyId.LIST_COLUMNWIDTH, "57,90,10,*")
 		}   // don't collapse the column if this window of data happens to not have coverart, so no else branch here
@@ -259,7 +264,7 @@ class EnqueuedView(val state: RHMIState, val musicController: MusicController, v
 		// add checkmark to new song
 		if (showNeighbors) {
 			showList(max(0, playingIndex - 5), 10)
-		} else {
+		} else if (oldPlayingIndex != playingIndex) {
 			showList(playingIndex, 1)
 		}
 
