@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">AAIdrive Projection</string>
+    <string name="app_desc">Show Android Auto on the BMW screen through Open Headunit on this phone. Install the receiver, enable Android Auto developer settings, and start its headunit server before starting here. Keep the phone unlocked in landscape with Open Headunit visible. Configure and test while parked.</string>
+    <string name="notification_requests_channel_name">Mirroring Permission Request</string>
+    <string name="notification_ongoing_channel_name">Mirroring Status</string>
+
+    <string name="lbl_status_not_ready">Screen mirroring not ready</string>
+    <string name="lbl_status_not_allowed">Screen mirroring permission needed</string>
+    <string name="lbl_status_waiting">Screen mirroring ready</string>
+    <string name="lbl_status_active">Screen mirroring active</string>
+    <string name="btn_grant_mirror_auth">Grant mirroring permission</string>
+    <string name="btn_grant_notification_auth">Grant notification permission</string>
+    <string name="lbl_notification_auth">Prompt for mirroring permission as needed:</string>
+    <string name="lbl_status_autoclose">Automatically times out if the car isn\'t connected within a minute</string>
+    <string name="lbl_open_car">Next, open the app in the car</string>
+    <string name="lbl_status">Status:</string>
+    <string name="lbl_grant">Grant</string>
+
+    <!-- Car Strings -->
+    <string name="MIRRORING_TITLE">Android Auto (experimental)</string>
+    <string name="PERMISSION_PROMPT">Please open the phone app to grant screen recording permission</string>
+    <string name="btn_start_headunit">Start Android Auto on BMW</string>
+    <string name="btn_install_headunit">Get Open Headunit</string>
+    <string name="btn_projection_help">Setup instructions</string>
+    <string name="btn_stop_mirroring">Stop sharing screen</string>
+    <string name="lbl_mirror_start_failed">Screen sharing could not start. Try again to grant fresh permission.</string>
+    <string name="lbl_headunit_missing">Install Open Headunit first, then try again.</string>
+    <string name="lbl_projection_privacy">Android asks permission each session. Share the entire display so Android Auto remains visible after it opens. Anything shown on the phone can appear in the car. Stop using the notification or this app. Locking the phone may end sharing.</string>
+    <string name="car_controls">Android Auto controls</string>
+    <string-array name="car_commands">
+        <item>View Android Auto</item><item>Left</item><item>Right</item><item>Up</item><item>Down</item><item>Select</item><item>Android Auto Back</item>
+    </string-array>
+</resources>

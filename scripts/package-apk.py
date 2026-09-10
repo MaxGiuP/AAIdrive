@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify and package the tested, optimized APK without including private signing material."""
+"""Verify and package both tested APKs without including private signing material."""
 
 import hashlib
 import json
@@ -9,7 +9,32 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
+
+
+BUILDS = (
+    {
+        "name": "main",
+        "outputs": "app/build/outputs/apk/nomapNonalyticsFull/optimized",
+        "reports": "app/build/test-results/testNomapNonalyticsFullDebugUnitTest",
+        "test_task": ":app:testNomapNonalyticsFullDebugUnitTest",
+        "variant": "nomapNonalyticsFullOptimized",
+        "package": "me.hufman.androidautoidrive",
+        "apk": "AAIdrive-MaxGiuP.apk",
+        "info": "build-info.json",
+    },
+    {
+        "name": "projection",
+        "outputs": "screen-mirror/build/outputs/apk/release",
+        "reports": "screen-mirror/build/test-results/testDebugUnitTest",
+        "test_task": ":screen-mirror:testDebugUnitTest",
+        "variant": "release",
+        "package": "io.github.maxgiup.aaidrive.projection",
+        "apk": "AAIdrive-Projection.apk",
+        "info": "projection-build-info.json",
+    },
+)
 
 
 def run(*args):
@@ -41,7 +66,82 @@ def check_update(previous_identity, previous_signer, identity, signer, source_co
         previous_info.get("source_commit") != source_commit
         or previous_info.get("version_code") != identity[1]
     ):
-        raise RuntimeError("Increment AAIdrive_ForkVersionCode before publishing changed source")
+        raise RuntimeError("Increment this APK's version code before publishing changed source")
+
+
+def verify_test_outputs(repo, build, stamp, outputs):
+    reports = sorted((repo / build["reports"]).glob("TEST-*.xml"))
+    relative_reports = [str(path.relative_to(repo)) for path in reports]
+    stamped_reports = stamp.get("test_reports", {}).get(build["name"], [])
+    if not reports or relative_reports != sorted(stamped_reports):
+        raise RuntimeError(f"{build['name']}: test reports do not match the successful build stamp")
+    output_hashes = stamp.get("outputs_sha256", {})
+    for output in [*outputs, *reports]:
+        expected = output_hashes.get(str(output.relative_to(repo)))
+        if expected != hashlib.sha256(output.read_bytes()).hexdigest():
+            raise RuntimeError("Build output changed after Gradle completed; run scripts/build-apk.sh")
+    suites = [ET.parse(path).getroot() for path in reports]
+    tests = sum(int(suite.get("tests", 0)) for suite in suites)
+    failures = sum(int(suite.get("failures", 0)) + int(suite.get("errors", 0)) for suite in suites)
+    skipped = sum(int(suite.get("skipped", 0)) for suite in suites)
+    if tests <= skipped or failures:
+        raise RuntimeError(f"{build['name']}: passing unit test reports are required before packaging")
+    return {"total": tests, "failed": failures, "skipped": skipped}
+
+
+def prepare_artifact(repo, build_tools, source_commit, stamp, build):
+    outputs = repo / build["outputs"]
+    metadata = json.loads((outputs / "output-metadata.json").read_text())
+    if metadata["variantName"] != build["variant"] or len(metadata["elements"]) != 1:
+        raise RuntimeError(f"Expected one {build['variant']} APK for {build['name']}")
+    element = metadata["elements"][0]
+    if Path(element["outputFile"]).name != element["outputFile"]:
+        raise RuntimeError("Expected an APK filename within its build output directory")
+    source_apk = outputs / element["outputFile"]
+    tests = verify_test_outputs(repo, build, stamp, [outputs / "output-metadata.json", source_apk])
+    signer = verified_signer(build_tools, source_apk)
+    identity = apk_identity(build_tools, source_apk)
+    expected_identity = metadata["applicationId"], int(element["versionCode"]), element["versionName"]
+    if identity != expected_identity or identity[0] != build["package"]:
+        raise RuntimeError("APK manifest package/version does not match the expected build metadata")
+    hashes = re.findall(r"(?:^|-)([0-9a-f]{7,40})(?=-|$)", identity[2])
+    if not any(source_commit.startswith(commit) for commit in hashes):
+        raise RuntimeError("APK version does not identify the current source commit; rebuild before packaging")
+
+    run(str(build_tools / "zipalign"), "-c", "-p", "4", str(source_apk))
+    manifest = run(str(build_tools / "aapt"), "dump", "xmltree", str(source_apk), "AndroidManifest.xml")
+    if re.search(r"android:debuggable[^\n]*0xffffffff", manifest):
+        raise RuntimeError("Published APKs must not be debuggable")
+    if build["name"] == "main":
+        key_entry = manifest.split('"com.spotify.music.API_KEY"', 1)[1].splitlines()[1]
+        if '"unset"' not in key_entry:
+            raise RuntimeError("Refusing to package a public APK with an unexpected Spotify API key")
+
+    artifact_dir = repo / "apk"
+    target = artifact_dir / build["apk"]
+    if target.exists():
+        previous_info_file = artifact_dir / build["info"]
+        previous_info = json.loads(previous_info_file.read_text()) if previous_info_file.exists() else {}
+        check_update(apk_identity(build_tools, target), verified_signer(build_tools, target),
+                     identity, signer, source_commit, previous_info)
+    digest = stamp["outputs_sha256"][str(source_apk.relative_to(repo))]
+    info = {
+        "file": target.name,
+        "application_id": metadata["applicationId"],
+        "variant": metadata["variantName"],
+        "version_name": element["versionName"],
+        "version_code": element["versionCode"],
+        "source_commit": source_commit,
+        "size_bytes": source_apk.stat().st_size,
+        "sha256": digest,
+        "signing": "Local Android development certificate; APK signature and alignment verified",
+        "signer_certificate_sha256": signer,
+        "debuggable": False,
+        "unit_tests": tests,
+        "unit_test_task": build["test_task"],
+        "phone_and_car_tested": False,
+    }
+    return source_apk, build, info
 
 
 def main():
@@ -59,29 +159,6 @@ def main():
     if stamp.get("source_commit") != source_commit or not 0 < started_ns <= completed_ns:
         raise RuntimeError("A successful build stamp for this source commit is required; run scripts/build-apk.sh")
 
-    outputs = repo / "app/build/outputs/apk/nomapNonalyticsFull/optimized"
-    metadata = json.loads((outputs / "output-metadata.json").read_text())
-    if metadata["variantName"] != "nomapNonalyticsFullOptimized" or len(metadata["elements"]) != 1:
-        raise RuntimeError("Expected one optimized APK")
-    element = metadata["elements"][0]
-    source_apk = outputs / element["outputFile"]
-
-    reports = list((repo / "app/build/test-results/testNomapNonalyticsFullDebugUnitTest").glob("TEST-*.xml"))
-    relative_reports = sorted(str(path.relative_to(repo)) for path in reports)
-    if not reports or relative_reports != sorted(stamp.get("test_reports", [])):
-        raise RuntimeError("Test reports do not match the successful build stamp")
-    output_hashes = stamp.get("outputs_sha256", {})
-    for output in [outputs / "output-metadata.json", source_apk, *reports]:
-        expected = output_hashes.get(str(output.relative_to(repo)))
-        if expected != hashlib.sha256(output.read_bytes()).hexdigest():
-            raise RuntimeError("Build output changed after Gradle completed; run scripts/build-apk.sh")
-    suites = [ET.parse(path).getroot() for path in reports]
-    tests = sum(int(suite.get("tests", 0)) for suite in suites)
-    failures = sum(int(suite.get("failures", 0)) + int(suite.get("errors", 0)) for suite in suites)
-    skipped = sum(int(suite.get("skipped", 0)) for suite in suites)
-    if tests <= skipped or failures:
-        raise RuntimeError("Passing unit test reports are required before packaging")
-
     sdk = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
     if not sdk:
         local = (repo / "local.properties").read_text()
@@ -91,51 +168,24 @@ def main():
         raise RuntimeError("Set ANDROID_HOME to the installed Android SDK")
     versions = [path for path in (Path(sdk) / "build-tools").iterdir() if re.fullmatch(r"\d+\.\d+\.\d+", path.name)]
     build_tools = max(versions, key=lambda path: tuple(map(int, path.name.split("."))))
-    signer = verified_signer(build_tools, source_apk)
-    identity = apk_identity(build_tools, source_apk)
-    expected_identity = metadata["applicationId"], int(element["versionCode"]), element["versionName"]
-    if identity != expected_identity or identity[0] != "me.hufman.androidautoidrive":
-        raise RuntimeError("APK manifest package/version does not match optimized build metadata")
-    hashes = re.findall(r"(?:^|-)([0-9a-f]{7,40})(?=-|$)", identity[2])
-    if not any(source_commit.startswith(commit) for commit in hashes):
-        raise RuntimeError("APK version does not identify the current source commit; rebuild before packaging")
 
-    run(str(build_tools / "zipalign"), "-c", "-p", "4", str(source_apk))
-    manifest = run(str(build_tools / "aapt"), "dump", "xmltree", str(source_apk), "AndroidManifest.xml")
-    if re.search(r"android:debuggable[^\n]*0xffffffff", manifest):
-        raise RuntimeError("The optimized APK must not be debuggable")
-    key_entry = manifest.split('"com.spotify.music.API_KEY"', 1)[1].splitlines()[1]
-    if '"unset"' not in key_entry:
-        raise RuntimeError("Refusing to package a public APK with an unexpected Spotify API key")
-
+    # Validate both artifacts and both update paths before replacing either published APK.
+    artifacts = [prepare_artifact(repo, build_tools, source_commit, stamp, build) for build in BUILDS]
     artifact_dir = repo / "apk"
     artifact_dir.mkdir(exist_ok=True)
-    target = artifact_dir / "AAIdrive-MaxGiuP.apk"
-    if target.exists():
-        previous_info_file = artifact_dir / "build-info.json"
-        previous_info = json.loads(previous_info_file.read_text()) if previous_info_file.exists() else {}
-        check_update(apk_identity(build_tools, target), verified_signer(build_tools, target),
-                     identity, signer, source_commit, previous_info)
-    shutil.copy2(source_apk, target)
-    digest = hashlib.sha256(target.read_bytes()).hexdigest()
-    (artifact_dir / (target.name + ".sha256")).write_text(f"{digest}  {target.name}\n")
-    info = {
-        "file": target.name,
-        "application_id": metadata["applicationId"],
-        "variant": metadata["variantName"],
-        "version_name": element["versionName"],
-        "version_code": element["versionCode"],
-        "source_commit": source_commit,
-        "size_bytes": target.stat().st_size,
-        "sha256": digest,
-        "signing": "Local Android development certificate; APK signature and alignment verified",
-        "signer_certificate_sha256": signer,
-        "debuggable": False,
-        "unit_tests": {"total": tests, "failed": failures, "skipped": skipped},
-        "phone_and_car_tested": False,
-    }
-    (artifact_dir / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
-    print(f"Packaged {target.name}: {target.stat().st_size:,} bytes, {tests} tests, {digest}")
+    with tempfile.TemporaryDirectory(prefix=".package-", dir=artifact_dir) as staging:
+        staging = Path(staging)
+        for source_apk, build, info in artifacts:
+            staged = staging / build["apk"]
+            shutil.copy2(source_apk, staged)
+            if hashlib.sha256(staged.read_bytes()).hexdigest() != info["sha256"]:
+                raise RuntimeError("APK changed during packaging; run scripts/build-apk.sh")
+            (staging / (build["apk"] + ".sha256")).write_text(f"{info['sha256']}  {build['apk']}\n")
+            (staging / build["info"]).write_text(json.dumps(info, indent=2) + "\n")
+        for _, build, info in artifacts:
+            for filename in (build["apk"], build["apk"] + ".sha256", build["info"]):
+                os.replace(staging / filename, artifact_dir / filename)
+            print(f"Packaged {build['apk']}: {info['size_bytes']:,} bytes, {info['unit_tests']['total']} tests, {info['sha256']}")
 
 
 if __name__ == "__main__":

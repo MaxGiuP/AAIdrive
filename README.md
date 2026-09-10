@@ -1,3 +1,9 @@
+> **MaxGiuP fork:** Installable APKs are in [apk/](apk/). Media defaults, selectable
+> playback queues and native BMW destination sharing are included in AAIdrive.
+> The new [experimental Android Auto projection companion](docs/android-auto-projection.md)
+> can relay a separately installed Open Headunit receiver through the BMW display
+> connection. Setup and phone/car testing are required; no Google Maps API key is needed.
+
 AAIdrive
 ========
 
@@ -216,8 +222,8 @@ Limitations
 This project replicates some of the features of Android Auto using the IDrive interface, using the same APIs that Android Auto uses to talk to the music apps. It cannot currently provide more advanced Android Auto features, such as:
 
   - Integration with the car's Voice Assistant button
-  - Screen-casting of arbitrary phone apps to the car (Google Maps, Waze, or any other apps)
-  - Displaying the original Android Auto interface at all
+  - Screen capture in the main APK. The separate [Projection APK](docs/android-auto-projection.md) provides consent-based phone-screen capture with transport-dependent performance.
+  - Displaying the original Android Auto interface directly. This fork adds a separate experimental [projection companion](docs/android-auto-projection.md) that captures Open Headunit on the phone.
 
 Due to the unofficial reverse-engineered nature of this project, it has some limitations:
 

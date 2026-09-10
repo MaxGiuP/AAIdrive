@@ -548,4 +548,5 @@
     <string name="MUSIC_SPOTIFY_THUMBS_DOWN_SELECTED">Thumbed Down</string>
     <string name="MUSIC_SPOTIFY_BROWSEROOT_LIBRARY">Your Library</string>
     <string name="MUSIC_SPOTIFY_BROWSEROOT_BROWSE">Browse</string>
+    <string name="btn_android_auto_projection">Android Auto projection (experimental)</string>
 </resources>

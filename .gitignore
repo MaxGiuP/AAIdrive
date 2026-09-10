@@ -21,3 +21,7 @@ sentry.properties
 _site
 .sass-cache
 spotify-app-remote/build
+
+/screen-mirror/build/
+/screen-mirror-lib/build/
+/screen-mirror/src/main/assets/carapplications/

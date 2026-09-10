@@ -27,14 +27,19 @@ API key. AAIdrive's BMW Connected Apps connection is a different interface from
 Android Auto or CarPlay. See Google's
 [Android Auto overview](https://developer.android.com/training/cars/platforms/android-auto).
 
-The upstream [Screen Mirroring add-on](https://github.com/BimmerGestalt/IDriveConnectAddons/tree/main/screen_mirror)
-can display the phone's actual Google Maps app through AAIdrive. It uses Android's
-screen-capture consent and transfers compressed frames over the BMW connection.
-It is a separate app, is not bundled in this APK, and has not been tested with this
-fork on a phone/car. Its frame rate and latency depend on the connection; Bluetooth
-can be a substantial bottleneck. This is not a CarPlay translator or a promise of
-Android Auto-like responsiveness. Google Maps remains responsible for its route
-and can recalculate it as usual.
+This fork now includes an experimental [AAIdrive Projection companion](android-auto-projection.md).
+It runs alongside separately installed Open Headunit, which receives Android Auto on
+the same phone. Android screen capture sends that receiver view to the BMW through
+Connected Apps; Google Maps continues to calculate and display its own route.
+The companion also forwards iDrive navigation controls to Open Headunit.
+No Google Cloud account or API key is needed for this path.
+
+Install both fork APKs in [apk/](../apk/) and the linked Open Headunit release, then
+follow the setup guide. Recent Android Auto versions require manually starting the
+Android Auto developer headunit server. This has not yet been tested on a phone/car.
+The final link transfers JPEG frames, so BMW transport bandwidth still limits
+smoothness, especially over Bluetooth. Native BMW destination handoff remains
+available independently.
 
 ## Can an ordinary APK make an Android phone act as a CarPlay phone?
 

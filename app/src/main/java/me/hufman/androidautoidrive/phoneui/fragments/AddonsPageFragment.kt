@@ -17,6 +17,15 @@ class AddonsPageFragment: Fragment() {
 
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 		super.onViewCreated(view, savedInstanceState)
+        view.findViewById<Button>(R.id.btnProjection).setOnClickListener {
+            val launch = requireContext().packageManager.getLaunchIntentForPackage("io.github.maxgiup.aaidrive.projection")
+            try {
+                startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse(
+                    "https://github.com/MaxGiuP/AAIdrive/blob/main/docs/android-auto-projection.md")))
+            } catch (_: android.content.ActivityNotFoundException) {
+                // A receiver/browser may have been removed since the query.
+            }
+        }
 		view.findViewById<Button>(R.id.btnLearn).setOnClickListener {
 			val intent = Intent(Intent.ACTION_VIEW).apply {
 				data = Uri.parse("https://github.com/BimmerGestalt/IDriveConnectAddons")

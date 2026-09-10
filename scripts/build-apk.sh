@@ -18,6 +18,8 @@ python3 -c 'import json, pathlib, sys, time; pathlib.Path(sys.argv[2]).write_tex
 AndroidAutoIdrive_SpotifyApiKey=unset ./gradlew \
     :app:testNomapNonalyticsFullDebugUnitTest \
     :app:assembleNomapNonalyticsFullOptimized \
+    :screen-mirror:testDebugUnitTest \
+    :screen-mirror:assembleRelease \
     -PAndroidAutoIdrive_SpotifyApiKey=unset --max-workers=4 --console=plain
 
 # Gradle validates test inputs even when their outputs are UP-TO-DATE. Bind those exact
@@ -31,12 +33,21 @@ import time
 
 stamp_path = Path(sys.argv[1])
 stamp = json.loads(stamp_path.read_text())
-outputs = Path("app/build/outputs/apk/nomapNonalyticsFull/optimized")
-metadata_path = outputs / "output-metadata.json"
-metadata = json.loads(metadata_path.read_text())
-reports = sorted(Path("app/build/test-results/testNomapNonalyticsFullDebugUnitTest").glob("TEST-*.xml"))
-files = [metadata_path, outputs / metadata["elements"][0]["outputFile"], *reports]
-stamp["test_reports"] = [str(path) for path in reports]
+builds = {
+    "main": ("app/build/outputs/apk/nomapNonalyticsFull/optimized",
+             "app/build/test-results/testNomapNonalyticsFullDebugUnitTest"),
+    "projection": ("screen-mirror/build/outputs/apk/release",
+                   "screen-mirror/build/test-results/testDebugUnitTest"),
+}
+files = []
+stamp["test_reports"] = {}
+for name, (outputs_dir, reports_dir) in builds.items():
+    outputs = Path(outputs_dir)
+    metadata_path = outputs / "output-metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    reports = sorted(Path(reports_dir).glob("TEST-*.xml"))
+    files.extend([metadata_path, outputs / metadata["elements"][0]["outputFile"], *reports])
+    stamp["test_reports"][name] = [str(path) for path in reports]
 stamp["outputs_sha256"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
 stamp["completed_ns"] = time.time_ns()
 stamp_path.write_text(json.dumps(stamp))

@@ -26,6 +26,11 @@
             android:name="me.hufman.androidautoidrive.phoneui.fragments.AddonAppsListFragment"/>
 
         <Button
+            android:id="@+id/btnProjection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_android_auto_projection" />
+        <Button
             android:id="@+id/btnLearn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
