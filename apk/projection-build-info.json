@@ -1,0 +1,20 @@
+{
+  "file": "AAIdrive-Projection.apk",
+  "application_id": "io.github.maxgiup.aaidrive.projection",
+  "variant": "release",
+  "version_name": "0.1.0-943fab1",
+  "version_code": 1,
+  "source_commit": "943fab1512235cae0a26b8b5831c976da40b3bb1",
+  "size_bytes": 2540434,
+  "sha256": "7e0a751a4fb91f9240895938bb98f605332ce32a3c68ac3a9792271794843002",
+  "signing": "Local Android development certificate; APK signature and alignment verified",
+  "signer_certificate_sha256": "1c2bf29fe98fe245b1cbc11f4efe302d7ac428a13342aa0e5ef591cdb30cabe0",
+  "debuggable": false,
+  "unit_tests": {
+    "total": 39,
+    "failed": 0,
+    "skipped": 0
+  },
+  "unit_test_task": ":screen-mirror:testDebugUnitTest",
+  "phone_and_car_tested": false
+}
