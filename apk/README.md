@@ -2,10 +2,10 @@
 
 [Download AAIdrive-MaxGiuP.apk](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-MaxGiuP.apk)
 
-Version: `1.4.4-5-32a1847` (8.06 MB), version code
-`10404002`. Built from
-[`32a1847a`](https://github.com/MaxGiuP/AAIdrive/commit/32a1847a3e558024cbbb5dc95c62cc98bbf549f4).
-The final build passed all 576 unit tests; APK signature,
+Version: `1.4.4-7-904ae9d` (8.06 MB), version code
+`10404003`. Built from
+[`904ae9d2`](https://github.com/MaxGiuP/AAIdrive/commit/904ae9d2b0e1188111cdafabb96da737d4cad6e6).
+The final build passed all 586 unit tests; APK signature,
 alignment, source version, and update compatibility checks passed.
 Full source, signing certificate, and checksum details are in
 [build-info.json](build-info.json). Phone and in-car testing have not been performed.
@@ -29,7 +29,11 @@ Audible/Rumble/YouTube support, and selectable playlists. Playlist availability 
 limited to the queue the player exposes through Android's media APIs.
 See [performance and navigation notes](../docs/maxgiup-improvements.md) for caching,
 request cleanup, and Google Maps destination sharing to BMW/MINI navigation.
-This APK does not provide embedded Google Maps or Android Auto projection.
+The latest native handoff uses embedded destination coordinates when available,
+responds to navigation status events, and avoids duplicate lookups and replacement
+route retries. This APK does not provide embedded Google Maps, Android Auto
+projection, or Android-to-CarPlay translation. See [navigation options and API costs](../docs/maxgiup-navigation-options.md)
+for the supported paths and limitations.
 
 Build requirements: JDK 17+, Python 3, Android SDK platform 35, the Gradle wrapper,
 and the upstream resources described in [external/README.md](../external/README.md).
