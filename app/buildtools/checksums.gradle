@@ -10,7 +10,9 @@ buildscript {
 }
 
 task "generateApkChecksums" {
-    def packages = fileTree(dir: projectDir, includes: ["**/*.apk"])
+    // Scanning the whole project also claims unrelated test/compiler task outputs.
+    // Only packaged APKs are inputs, allowing assemble and unit tests in one invocation.
+    def packages = fileTree(dir: layout.buildDirectory.dir("outputs/apk"), includes: ["**/*.apk"])
     inputs.files(packages)
     outputs.files(packages.collect { new File(it.absolutePath + ".sha1") } )
 
