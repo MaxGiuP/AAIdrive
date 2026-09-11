@@ -1,0 +1,55 @@
+{
+  "file": "AAIdrive-Setup.apk",
+  "application_id": "io.github.maxgiup.aaidrive.setup",
+  "variant": "release",
+  "version_name": "0.1.0-9184a3f",
+  "version_code": 1,
+  "source_commit": "9184a3f7391108b87a630909f232a2ad607fd4ea",
+  "size_bytes": 23457852,
+  "sha256": "57287d7b0b71e9cfc9adecb0185acc4424b4866af210dd87a4d29ba99aa7a982",
+  "signing": "Local Android development certificate; APK signature and alignment verified",
+  "signer_certificate_sha256": "1c2bf29fe98fe245b1cbc11f4efe302d7ac428a13342aa0e5ef591cdb30cabe0",
+  "debuggable": false,
+  "unit_tests": {
+    "total": 25,
+    "failed": 0,
+    "skipped": 0
+  },
+  "unit_test_task": ":installer:testDebugUnitTest",
+  "phone_and_car_tested": false,
+  "bundled_apps": [
+    {
+      "id": "main",
+      "name": "AAIdrive",
+      "file": "apps/AAIdrive-MaxGiuP.apk",
+      "packageName": "me.hufman.androidautoidrive",
+      "versionCode": 10404005,
+      "versionName": "1.4.4-11-9184a3f",
+      "sha256": "8af3403cad82dc42b1f053cbfa22aaa28363b0dcecd5229cc1a5a4b1bd58aefa",
+      "signerSha256": "1c2bf29fe98fe245b1cbc11f4efe302d7ac428a13342aa0e5ef591cdb30cabe0",
+      "minSdk": 23
+    },
+    {
+      "id": "projection",
+      "name": "AAIdrive Projection",
+      "file": "apps/AAIdrive-Projection.apk",
+      "packageName": "io.github.maxgiup.aaidrive.projection",
+      "versionCode": 2,
+      "versionName": "0.2.0-9184a3f",
+      "sha256": "5e338951045cdb342a9636ffdfe7e2677f4871286868526f35e997c6a4e6c0f9",
+      "signerSha256": "1c2bf29fe98fe245b1cbc11f4efe302d7ac428a13342aa0e5ef591cdb30cabe0",
+      "minSdk": 23
+    },
+    {
+      "id": "headunit",
+      "name": "Open Headunit",
+      "file": "apps/Open-Headunit-v3.4.0-beta1.apk",
+      "packageName": "com.andrerinas.headunitrevived",
+      "versionCode": 106,
+      "versionName": "3.4.0-beta1",
+      "sha256": "4bb5cce8ff49f745413fd67695c74f864c9f4b9284592cc75b2ee4839818f5fd",
+      "signerSha256": "615bc3c7a74839918d01517e49397f503a5473f89266af55a26d485c1e86155d",
+      "minSdk": 16
+    }
+  ]
+}

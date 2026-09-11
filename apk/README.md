@@ -1,73 +1,86 @@
-# Installable APKs
+# One APK to set everything up
 
-| App | Version | Size | Download |
-| --- | --- | --- | --- |
-| AAIdrive | `1.4.4-9-943fab1` | 8.06 MB | [Download APK](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-MaxGiuP.apk) |
-| Projection companion (experimental) | `0.1.0-943fab1` | 2.54 MB | [Download APK](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Projection.apk) |
+**[Download AAIdrive-Setup.apk — 23.46 MB](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk)**
 
-Both APKs were built from source commit
-[`943fab15`](https://github.com/MaxGiuP/AAIdrive/commit/943fab1512235cae0a26b8b5831c976da40b3bb1).
-The final build passed **586 AAIdrive tests and 39 projection tests**.
-APK signatures, alignment, source versions and the main APK update path were verified.
-Phone and in-car testing have not been performed.
+Install and open this single APK, then tap **Install everything**. It includes:
 
-## Android Auto on the BMW screen
+- AAIdrive `1.4.4-11-9184a3f` with the media and native BMW navigation improvements.
+- AAIdrive Projection `0.2.0-9184a3f` for the experimental car display connection.
+- The unchanged, upstream-signed Open Headunit `3.4.0-beta1` receiver.
 
-Install both APKs above, plus the separately distributed
-[Open Headunit v3.4.0-beta1](https://github.com/andreknieriem/open-headunit/releases/tag/v.3.4.0-beta1).
-Follow the [projection setup guide](../docs/android-auto-projection.md): enable Android
-Auto developer settings, start its headunit server, then use **Start Android Auto on
-BMW** in AAIdrive Projection and grant screen-capture permission.
+The three components install offline from the setup APK. Android still requires its
+install-source permission and install confirmations; they become separate installed
+apps. Setup skips compatible installed versions, verifies APKs before handing them
+to Android, handles cancellation, and preserves existing apps when signing keys conflict.
+It never uninstalls another app or removes its settings.
 
-The phone runs the Android Auto receiver and sends its picture through AAIdrive's
-BMW Connected Apps connection. The companion forwards iDrive navigation controls.
-No Google Maps API key is required. This remains experimental: the JPEG connection
-limits frame rate, especially over Bluetooth, and actual Pixel/BMW operation still
-needs testing. Keep the phone unlocked with Open Headunit visible.
-This does not add native Android Auto or translate CarPlay.
+Setup then guides AAIdrive permissions, Open Headunit configuration, Android Auto's
+headunit server and screen sharing. Google's Android Auto and Google Maps apps are
+usually already on the phone. They are not repackaged; setup links to Google Play
+if either is missing. Installing those Google apps needs internet.
 
-Capture reuses image memory, suppresses identical frames, releases capture buffers
-before sending, and bounds frame scheduling and pending navigation commands.
-Capture stops on consent revocation, explicit Stop, or car disconnection.
+Follow the [one-APK setup guide](../docs/one-apk-setup.md). No Google Maps API key is
+required. Android Auto projection remains experimental, and actual BMW latency,
+audio and controls need testing on the phone/car. Bluetooth can limit smoothness.
 
-## Main app features and signing
+## Build and verification
 
-AAIdrive uses the `nomapNonalyticsFullOptimized` variant: R8 enabled, debugging
-disabled, no embedded maps or analytics. It retains the ReVanced music default,
-selectable exposed playlists, expanded media-app support and native BMW destination
-handoff. See [media setup](../docs/maxgiup-media.md),
-[performance improvements](../docs/maxgiup-improvements.md), and
-[navigation options](../docs/maxgiup-navigation-options.md).
-Spotify's optional proprietary API integration is disabled because no API key is configured.
+Setup version: `0.1.0-9184a3f` (version code `1`).
+All three fork APKs were built from
+[`9184a3f7`](https://github.com/MaxGiuP/AAIdrive/commit/9184a3f7391108b87a630909f232a2ad607fd4ea).
+The build passed **586 main app + 39 projection + 25 installer unit tests**,
+plus 6 packaging checks. Signatures, alignment, APK/source identities, update paths
+and the exact three APKs embedded in Setup were verified.
+The [installer build record](setup-build-info.json) lists each bundled checksum and signer.
+The single-APK installation flow also passed on an Android 35 x86_64 emulator with
+networking disabled: install-source permission, cancellation, resume, skipping an
+already installed component, and all three component installations. See the
+[emulator test record](setup-emulator-test.json). This does not establish physical
+Pixel/BMW projection performance.
 
-The main APK uses version code `10404004` and the same local Android
-development certificate as earlier fork builds, allowing updates over those
-installations. Projection has a separate application ID and version code
-`1`. Both are signed, non-debuggable custom builds; private signing
-material stays outside this repository. An official AAIdrive installation signed
-with a different certificate cannot be updated by this fork; preserve settings
-before uninstalling an incompatible build.
+Fork APKs use a local Android development signing certificate. The main APK uses
+version code `10404005` and Projection `2`, with the same certificate as
+previous fork releases. Open Headunit keeps its original upstream certificate.
+Private signing keys are excluded from this repository. Official AAIdrive builds
+with a different signer cannot be updated by this fork; setup reports the conflict
+and leaves that installation intact.
 
-Exact source, test, certificate and checksum information is recorded separately in
-[build-info.json](build-info.json) and [projection-build-info.json](projection-build-info.json).
+The main APK uses `nomapNonalyticsFullOptimized`: R8 optimization, no embedded maps,
+no analytics and no optional Spotify API key. See [media setup](../docs/maxgiup-media.md)
+and [navigation options](../docs/maxgiup-navigation-options.md).
 
-## Rebuild and verify
+## Individual APKs and source
 
-Requirements: JDK 17+, Python 3, Android SDK platform 35, the Gradle wrapper, and the
-upstream resources described in [external/README.md](../external/README.md).
-From a clean source commit, run:
+These downloads are optional when using the Setup APK:
+
+| Component | Download | Build record |
+| --- | --- | --- |
+| AAIdrive | [APK](AAIdrive-MaxGiuP.apk) | [Metadata](build-info.json) |
+| Projection | [APK](AAIdrive-Projection.apk) | [Metadata](projection-build-info.json) |
+| Open Headunit | [APK](Open-Headunit-v3.4.0-beta1.apk) | [Upstream identity and sources](../third-party/open-headunit/README.md) |
+
+Open Headunit's license, source snapshots, FFmpeg/libusb sources and build notes are
+available at [third-party/open-headunit](../third-party/open-headunit/README.md).
+Source and license notices are also included in Setup's offline license screen.
+
+## Rebuild
+
+Requirements: JDK 17+, Python 3, Android SDK platform 35, the Gradle wrapper, the
+checked-in Open Headunit artifacts and [upstream resources](../external/README.md).
+From a clean source commit:
 
 ```sh
 ./scripts/build-apk.sh
 ```
 
-The script builds, tests and verifies both apps before packaging them. Increment
-`AAIdrive_ForkVersionCode` in `gradle.properties` and Projection's `versionCode` in
-`screen-mirror/build.gradle` before publishing changed source. Another machine needs
-the original signing key to produce compatible updates.
+This builds and tests all three fork APKs, validates the nested component payloads,
+and packages them. Increment each fork app's version code before publishing changed
+source: `AAIdrive_ForkVersionCode` in `gradle.properties`, Projection's code in
+`screen-mirror/build.gradle`, and Setup's code in `installer/build.gradle`.
+Compatible updates require the original signing key.
 
-Check downloads against the included checksums from this directory:
+Check the single download from this directory:
 
 ```sh
-sha256sum -c AAIdrive-MaxGiuP.apk.sha256 AAIdrive-Projection.apk.sha256
+sha256sum -c AAIdrive-Setup.apk.sha256
 ```

@@ -1,0 +1,84 @@
+{
+  "artifact": "AAIdrive-Setup.apk",
+  "apk_sha256": "57287d7b0b71e9cfc9adecb0185acc4424b4866af210dd87a4d29ba99aa7a982",
+  "source_commit": "9184a3f7391108b87a630909f232a2ad607fd4ea",
+  "version_name": "0.1.0-9184a3f",
+  "version_code": 1,
+  "tested_at_utc": "2026-09-11T00:05:13.936170+00:00",
+  "environment": {
+    "type": "Android Emulator",
+    "android_api": 35,
+    "abi": "x86_64",
+    "image": "system-images;android-35;google_apis;x86_64",
+    "network_during_payload_installation": {
+      "wifi_enabled": false,
+      "mobile_data_enabled": false
+    }
+  },
+  "result": "passed",
+  "checks": [
+    {
+      "name": "unknown_source_permission",
+      "result": "passed",
+      "details": "Granted Allow from this source through the actual Android Settings screen; no appops permission bypass was used."
+    },
+    {
+      "name": "offline_install_all_three",
+      "result": "passed",
+      "details": "Installed AAIdrive, AAIdrive Projection and upstream Open Headunit from the final Setup APK with Wi-Fi and mobile data disabled. Each native Android installation prompt was explicitly approved."
+    },
+    {
+      "name": "cancel_and_resume",
+      "result": "passed",
+      "details": "After AAIdrive installed, canceled the Projection installation prompt. Setup stopped, kept AAIdrive, and reported Projection was not installed. Resuming Install everything skipped AAIdrive, installed Projection and automatically advanced to Open Headunit."
+    },
+    {
+      "name": "archive_and_installed_package_verification",
+      "result": "passed",
+      "details": "Real PackageManager archive/version/current-signer checks and FileProvider content URIs succeeded for all three payloads. Setup reported every installed app compatible."
+    },
+    {
+      "name": "fresh_launch_skips_installed_apps",
+      "result": "passed",
+      "details": "Force-stopped and reopened Setup after completion. It recognized all three installed apps, displayed the all-ready message, disabled Install everything and opened no installation prompt."
+    },
+    {
+      "name": "launch_aaidrive",
+      "result": "passed",
+      "details": "Displayed AAIdrive connection onboarding."
+    },
+    {
+      "name": "launch_projection",
+      "result": "passed",
+      "details": "Displayed the projection setup screen and expected screen-capture permission-needed status."
+    },
+    {
+      "name": "launch_open_headunit",
+      "result": "passed",
+      "details": "Displayed Open Headunit welcome, language and onboarding controls; no configuration beyond its initial screen was attempted."
+    }
+  ],
+  "installed_apps": [
+    {
+      "package_name": "me.hufman.androidautoidrive",
+      "version_name": "1.4.4-11-9184a3f",
+      "version_code": 10404005
+    },
+    {
+      "package_name": "io.github.maxgiup.aaidrive.projection",
+      "version_name": "0.2.0-9184a3f",
+      "version_code": 2
+    },
+    {
+      "package_name": "com.andrerinas.headunitrevived",
+      "version_name": "3.4.0-beta1",
+      "version_code": 106
+    }
+  ],
+  "physical_phone_tested": false,
+  "car_tested": false,
+  "phone_and_car_tested": false,
+  "android_auto_projection_tested": false,
+  "audio_routing_tested": false,
+  "scope": "Installer and initial-launch smoke test only; no physical BMW, Pixel, Android Auto session or measured projection performance."
+}
