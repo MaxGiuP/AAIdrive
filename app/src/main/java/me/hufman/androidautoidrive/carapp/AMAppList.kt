@@ -33,8 +33,8 @@ interface AMAppInfo {
 	companion object {
 		fun getAppWeight(appName: String): Int {
 			val name = appName.lowercase().toCharArray().filter { it.isLetter() }
-			var score = min(name[0].code - 'a'.code, 'z'.code)
-			score = score * 6 + ((name[1].code / 6.0).roundToInt())
+			var score = min(name.getOrElse(0) { 'a' }.code - 'a'.code, 'z'.code)
+			score = score * 6 + ((name.getOrElse(1) { 'a' }.code / 6.0).roundToInt())
 			return score
 		}
 	}
@@ -74,7 +74,7 @@ class AMAppList<T: AMAppInfo>(val connection: BMWRemotingServer, val graphicsHel
 	 * converts the given appId to the original appInfo object
 	 */
 	fun getAppInfo(appId: String): T? {
-		return knownApps[appId]
+		return synchronized(connection) { knownApps[appId] }
 	}
 
 	/**
@@ -99,15 +99,17 @@ class AMAppList<T: AMAppInfo>(val connection: BMWRemotingServer, val graphicsHel
 			for (app in apps) {
 				if (!knownApps.containsKey(app.amAppIdentifier)) {
 					createApp(app)
-					knownApps[app.amAppIdentifier] = app
 				}
+				// Discovery can replace the controller/service information without changing
+				// the displayed name. Clicks must use the latest object in that case too.
+				knownApps[app.amAppIdentifier] = app
 			}
 		}
 	}
 
 	fun redrawApp(app: T) {
-		if (knownApps.containsKey(app.amAppIdentifier)) {
-			createApp(app)
+		synchronized(connection) {
+			knownApps[app.amAppIdentifier]?.let { createApp(it) }
 		}
 	}
 

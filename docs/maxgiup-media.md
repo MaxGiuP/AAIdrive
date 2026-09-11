@@ -5,14 +5,25 @@ It tries ReVanced, then ReVanced Extended, then stock or root-patched YouTube Mu
 An already playing app, a saved player, and apps you explicitly hide keep their priority.
 The preference controls AAIdrive; it does not change Android's system defaults.
 
+YouTube Music has its own shortcut in ConnectedDrive/Online Services when AAIdrive
+discovers an installed, unhidden YouTube Music app. Opening the shortcut selects that app
+and opens AAIdrive's music screen. Music uses the standard multimedia layout by
+default, and the playlist remains available inside AAIdrive.
+The shortcut uses the installed app's icon and distinguishes ReVanced and ReVanced
+Extended by their package names. It stays visible while the player connects; if
+playback does not start, open the player on the phone first. BMW's generic
+Audioplayer entry may also remain. This changes AAIdrive's registrations, not an
+independent Spotify entry created by another app.
+
 ## Setup
 
 1. Install the [fork APK](../apk/README.md) and your chosen media apps.
 2. Grant AAIdrive notification access so it can discover active media sessions.
 3. Open YouTube Music ReVanced on the phone and start the playlist you want.
-4. Select YouTube Music in AAIdrive. The main ID5+ music selector lists the published
-   playlist tracks instead of Back / current song / Next. Scroll to a song and select it.
-   You can also open **Now Playing** (the queue), or the queue tab in AAIdrive's phone player.
+4. Open the YouTube Music shortcut in ConnectedDrive/Online Services, or select
+   YouTube Music in AAIdrive's music app list. Open **Now Playing** to select from
+   the playlist tracks published by the player. The queue tab in AAIdrive's phone
+   player offers the same published queue.
 
 Audible, Rumble, and YouTube/ReVanced are recognized by package name, including
 when their display names mention podcasts, live streams, or shows. Installed
@@ -20,10 +31,30 @@ players appear in AAIdrive's phone app list. A player that offers no media brows
 must start playback on the phone before its active session can be controlled in
 the car. Background playback must also be enabled/supported in that player.
 
+## Optional native iDrive 5+ layout
+
+AAIdrive no longer chooses the Spotify-branded layout automatically based on
+Spotify or BMW Connected being installed. To opt in, enable **Show Advanced
+Settings**, then open Music's advanced settings and enable **Use Spotify-branded
+layout (iDrive 5+)**. Reconnect the car to apply a layout change. This layout still
+uses the car's Spotify branding and is unavailable on iDrive 4.
+
+An existing explicit setting is preserved. If an earlier setup already enabled
+this option, turn it off and reconnect to use the standard multimedia layout.
+In the optional native layout, the main iDrive 5+ music selector and instrument
+cluster can show published queue tracks instead of Back / current song / Next.
+The internal **Now Playing** queue remains available with either layout.
+
+If only Back/Next is available, the [car and playlist diagnostics guide](car-diagnostics.md)
+explains how to check the phone's published queue and the car's reported capabilities.
+
 ## Changes
 
-- The main ID5+ music selector and instrument-cluster playlist display all published
-  queue tracks. Back/Next controls remain available when a player supplies no queue.
+- YouTube Music has a ConnectedDrive/Online Services shortcut, alongside AAIdrive's
+  internal music app selector. Standard multimedia is the default layout.
+- The optional native iDrive 5+ music selector and instrument-cluster playlist
+  display published queue tracks. Back/Next controls remain available when a
+  player supplies no queue.
 - YouTube Music's existing ReVanced Android Auto browse-root workaround also applies
   to ReVanced Extended. Stock/root-patched installations keep their negotiated root.
 - The queue retains every track supplied by the player, including its media ID,

@@ -95,18 +95,17 @@ class CarCapabilitiesViewModel(val carInformation: CarInformation, val musicAppM
 			_audioStateStatus.value = { getString(R.string.txt_capabilities_audiostate_yes) }
 			_audioStateHint.value = { "" }
 		} else {
-			_audioStateStatus.value = { getString(R.string.txt_capabilities_audiostate_no) }
+			_audioStateStatus.value = {
+				getString(if (carBrandSupported) R.string.txt_capabilities_audiostate_standard else R.string.txt_capabilities_audiostate_no)
+			}
 			if (!carBrandSupported) {
 				_audioStateHint.value = { "" }      // not supported, but not displayed in the UI
 			} else if (musicAppMode.isId4()) {
 				_audioStateHint.value = { getString(R.string.txt_capabilities_audiostate_id4) }
 			} else if (!musicAppMode.shouldRequestAudioContext()) {
 				_audioStateHint.value = { getString(R.string.txt_capabilities_audiostate_audiocontext) }
-			} else if (!musicAppMode.isNewSpotifyInstalled()) {
-				_audioStateHint.value = { getString(R.string.txt_capabilities_audiostate_spotify) }
 			} else {
-				// unknown reason
-				_audioStateHint.value = { "" }
+				_audioStateHint.value = { getString(R.string.txt_capabilities_audiostate_optin) }
 			}
 		}
 

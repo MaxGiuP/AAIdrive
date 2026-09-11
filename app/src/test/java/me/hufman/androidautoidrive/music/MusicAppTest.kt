@@ -3146,6 +3146,87 @@ class MusicAppTest {
 	}
 
 	@Test
+	fun testShortMediaAppLabelsCannotPreventHomeShortcutRegistration() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		val app = MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())
+		val revanced = MusicAppInfo("YouTube Music", mock(), MusicAppCompatibility.YOUTUBE_MUSIC_PACKAGES[0], null)
+		val shortNames = listOf("X", "", "🎵").mapIndexed { index, name -> MusicAppInfo(name, mock(), "player.$index", null) }
+		whenever(musicAppDiscovery.validApps) doReturn shortNames
+		whenever(musicAppDiscovery.allApps) doReturn shortNames + revanced
+		app.updateAmApps()
+		assertNotNull(app.homeAppList.getAppInfo(MusicHomeAppInfo(revanced).amAppIdentifier))
+		shortNames.forEach { assertNotNull(app.amAppList.getAppInfo(it.amAppIdentifier)) }
+	}
+
+	@Test
+	fun testHomeShortcutPreservesMediaEntryAndUsesLatestDiscoveredService() {
+		val mockServer = MockBMWRemotingServer()
+		IDriveConnection.mockRemotingServer = mockServer
+		val mode = mock<MusicAppMode> { on { isId4() } doReturn true }
+		val app = MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mode)
+		val revanced = MusicAppInfo("YouTube Music", mock(), MusicAppCompatibility.YOUTUBE_MUSIC_PACKAGES[0], null)
+		val homeId = MusicHomeAppInfo(revanced).amAppIdentifier
+		whenever(musicAppDiscovery.allApps) doReturn listOf(revanced)
+		whenever(musicAppDiscovery.validApps) doReturn emptyList()
+		app.updateAmApps()
+		assertNotNull(app.homeAppList.getAppInfo(homeId))
+		assertNull(app.amAppList.getAppInfo(revanced.amAppIdentifier))
+
+		// Once browser discovery finishes, keep the home shortcut and add the usual
+		// Media entry. A click must use the new service, without a second home icon.
+		val discovered = revanced.copy(className = "MusicBrowserService").apply { connectable = true }
+		whenever(musicAppDiscovery.allApps) doReturn listOf(discovered)
+		whenever(musicAppDiscovery.validApps) doReturn listOf(discovered)
+		app.updateAmApps()
+		assertEquals(1, mockServer.amApps.count { it == homeId })
+		assertEquals(me.hufman.androidautoidrive.carapp.AMCategory.MULTIMEDIA, app.amAppList.getAppInfo(discovered.amAppIdentifier)?.category)
+		val home = app.homeAppList.getAppInfo(homeId)!!
+		val metadata = app.homeAppList.getAMInfo(home)
+		assertEquals("YouTube Music ReVanced", metadata[1])
+		assertEquals("OnlineServices", metadata[3])
+		assertArrayEquals("Drawable{48x48}".toByteArray(), metadata[2] as ByteArray)
+		assertSame(discovered, home.musicApp)
+
+		val mockClient = IDriveConnection.mockRemotingClient as BMWRemotingClient
+		mockClient.am_onAppEvent(1, "unused", homeId, null)
+		verify(musicController).connectAppManually(same(discovered))
+		assertEquals(app.currentPlaybackView.state.id, mockServer.triggeredEvents[IDs.FOCUS_EVENT]?.get(0.toByte()))
+	}
+
+	@Test
+	fun testHidingYouTubeMusicRemovesOnlyItsHomeShortcut() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		val app = MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())
+		val revanced = MusicAppInfo("YouTube Music", mock(), MusicAppCompatibility.YOUTUBE_MUSIC_PACKAGES[0], null)
+		val spotify = MusicAppInfo("Spotify", mock(), "com.spotify.music", "Browser")
+		val homeId = MusicHomeAppInfo(revanced).amAppIdentifier
+		whenever(musicAppDiscovery.allApps) doReturn listOf(revanced, spotify)
+		whenever(musicAppDiscovery.validApps) doReturn listOf(spotify)
+		app.updateAmApps()
+		assertNotNull(app.homeAppList.getAppInfo(homeId))
+		revanced.hidden = true
+		app.updateAmApps()
+		assertNull(app.homeAppList.getAppInfo(homeId))
+		assertNotNull(app.amAppList.getAppInfo(spotify.amAppIdentifier))
+	}
+
+	@Test
+	fun testGenericEntryDoesNotSelectSpotifyWhenNativeLayoutWasUnavailable() {
+		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
+		val mode = mock<MusicAppMode> { on { supportsId5Playback() } doReturn true }
+		val revanced = MusicAppInfo("YouTube Music", mock(), MusicAppCompatibility.YOUTUBE_MUSIC_PACKAGES[0], "Browser")
+		val spotify = MusicAppInfo("Spotify", mock(), "com.spotify.music", "Browser")
+		whenever(musicController.currentAppInfo) doReturn revanced
+		whenever(musicController.currentAppController) doReturn mock()
+		whenever(musicAppDiscovery.validApps) doReturn listOf(revanced, spotify)
+		MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mode)
+		val mockClient = IDriveConnection.mockRemotingClient as BMWRemotingClient
+		mockClient.rhmi_onActionEvent(1, "unused", IDs.ENTRYBUTTON_ACTION, mapOf(43.toByte() to 2))
+		verify(musicController).connectAppManually(same(revanced))
+		verify(musicController, never()).connectAppManually(same(spotify))
+	}
+
+	@Test
 	fun testDefaultMusicAppOnFreshSetup() {
 		IDriveConnection.mockRemotingServer = MockBMWRemotingServer()
 		MusicApp(iDriveConnectionStatus, securityAccess, carAppResources, MusicImageIDsMultimedia, phoneAppResources, graphicsHelpers, musicAppDiscovery, musicController, mock())

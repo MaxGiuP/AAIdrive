@@ -135,7 +135,7 @@
     <string name="musicAppUnavailable">Unavailable</string>
     <string name="musicAppHidden">Hidden</string>
     <string name="enable_audio_context">Force Audio Focus over USB connection</string>
-    <string name="enable_spotify_layout">Always appear as Spotify app in IDrive5+</string>
+    <string name="enable_spotify_layout">Use Spotify-branded layout (iDrive 5+)</string>
     <string name="enable_audioplayer_layout">Prefer legacy compact music interface in IDrive5+</string>
     <string name="lbl_grant_sessions">Control over active music apps</string>
     <string name="lbl_grant_spotify_control">Ability to browse your Spotify library</string>
@@ -279,6 +279,8 @@
     <string name="txt_capabilities_audiocontext_hint">Listen to your phone\'s music over Bluetooth</string>
     <string name="txt_capabilities_audiostate_yes">Global Coverart is supported</string>
     <string name="txt_capabilities_audiostate_no">Global Coverart is not supported</string>
+    <string name="txt_capabilities_audiostate_standard">Using the standard AAIdrive music layout</string>
+    <string name="txt_capabilities_audiostate_optin">Global cover art is available with the optional Spotify layout in advanced music settings. Enabling it adds Spotify branding to the car menu.</string>
     <string name="txt_capabilities_audiostate_id4">ID4 does not support this feature</string>
     <string name="txt_capabilities_audiostate_audiocontext">This feature requires Audio Context</string>
     <string name="txt_capabilities_audiostate_spotify">Install the latest Spotify to enable this feature</string>

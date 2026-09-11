@@ -65,66 +65,57 @@ class AppModeTest {
 	}
 
 	@Test
-	fun testId5() {
-		val settings = MockAppSettings()
-		// spotify not installed
-		run {
-			val noSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, null)
-			assertFalse(noSpotifyMode.shouldId5Playback())
+	fun standardLayoutIsDefaultRegardlessOfSpotifyOrConnectedInstallation() {
+		val settings = MockAppSettings(AppSettings.KEYS.AUDIO_SUPPORTS_USB to "true")
+		for (connection in listOf(btConnection, usbConnection)) {
+			for (capabilities in listOf(id4Capabilities, id6Capabilities, emptyMap())) {
+				for (connectedInstalled in listOf(false, true)) {
+					for (spotify in listOf(null, "8.4.98.892", "8.5.68.904", "8.6.20", "9.1.0", "8.6.536-dogfood-xmax")) {
+						val mode = MusicAppMode(connection, capabilities, settings, connectedInstalled, null, null, spotify)
+						assertFalse("Spotify $spotify must not select branded resources", mode.supportsId5Playback())
+						assertFalse(mode.shouldId5Playback())
+						assertTrue("Standard layout retains audio context", mode.shouldRequestAudioContext())
+					}
+				}
+			}
 		}
-		// spotify not installed and no Connected is installed
-		run {
-			val noSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, false, null, null, null)
-			assertFalse(noSpotifyMode.shouldId5Playback())
-		}
-		// old spotify installed
-		run {
-			val oldSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, "8.4.98.892")
-			assertFalse(oldSpotifyMode.shouldId5Playback())
-		}
-		// old spotify installed but no Connected is installed
-		run {
-			val oldSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, false, null, null, "8.4.98.892")
-			assertTrue(oldSpotifyMode.shouldId5Playback())
-		}
-		// new spotify installed
-		run {
-			val newSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, "8.5.68.904")
-			assertTrue(newSpotifyMode.shouldId5Playback())
-		}
-		// new spotify installed and no Connected installed
-		run {
-			val newSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, false, null, null, "8.5.68.904")
-			assertTrue(newSpotifyMode.shouldId5Playback())
-		}
-		// newer spotify installed
-		run {
-			val newerSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, "8.6.20")
-			assertTrue(newerSpotifyMode.shouldId5Playback())
-		}
-		// fake old spotify installed
-		run {
-			val newerSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, "8.2.536-dogfood-xmax")
-			assertFalse(newerSpotifyMode.shouldId5Playback())
-		}
-		// fake new spotify installed
-		run {
-			val newerSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, "8.6.536-dogfood-xmax")
-			assertTrue(newerSpotifyMode.shouldId5Playback())
-		}
+	}
 
-		// force spotify layout
-		settings[AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT] = "true"
-		run {
-			val forcedSpotifyMode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, null)
-			assertTrue(forcedSpotifyMode.shouldId5Playback())
-		}
+	@Test
+	fun spotifyLayoutRequiresExplicitOptInAndCanBeTurnedOffAgain() {
+		val settings = MockAppSettings(AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT to "true")
+		val mode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, "9.1.0")
+		assertTrue(mode.supportsId5Playback())
+		assertTrue(mode.shouldId5Playback())
+		settings[AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT] = "false"
+		assertFalse(mode.supportsId5Playback())
+		assertFalse(mode.shouldId5Playback())
+		assertTrue(mode.shouldRequestAudioContext())
+	}
 
-		// can't do it in id4
-		run {
-			val forcedSpotifyMode = MusicAppMode(btConnection, id4Capabilities, settings, true, null, null, "8.6.20")
-			assertFalse(forcedSpotifyMode.shouldId5Playback())
-		}
+	@Test
+	fun explicitSpotifyLayoutKeepsWorkingWithoutSpotifyInstalled() {
+		val settings = MockAppSettings(AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT to "true")
+		val mode = MusicAppMode(btConnection, id6Capabilities, settings, false, null, null, null)
+		assertTrue(mode.supportsId5Playback())
+		assertTrue(mode.shouldId5Playback())
+	}
+
+	@Test
+	fun spotifyLayoutCannotBeForcedOnId4() {
+		val settings = MockAppSettings(AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT to "true")
+		val mode = MusicAppMode(btConnection, id4Capabilities, settings, true, null, null, "9.1.0")
+		assertFalse(mode.supportsId5Playback())
+		assertFalse(mode.shouldId5Playback())
+	}
+
+	@Test
+	fun legacyPlayerPreferenceDoesNotRemoveExplicitSpotifyResourceSelection() {
+		val settings = MockAppSettings(AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT to "true",
+			AppSettings.KEYS.FORCE_AUDIOPLAYER_LAYOUT to "true")
+		val mode = MusicAppMode(btConnection, id6Capabilities, settings, true, null, null, null)
+		assertTrue(mode.supportsId5Playback())
+		assertFalse(mode.shouldId5Playback())
 	}
 
 	@Test

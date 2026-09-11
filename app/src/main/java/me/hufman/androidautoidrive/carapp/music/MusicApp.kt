@@ -42,6 +42,7 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 
 	val avContext: AVContextHandler
 	val amAppList: AMAppList<MusicAppInfo>
+	val homeAppList: AMAppList<MusicHomeAppInfo>
 	val contextTracker = ContextTracker()
 
 	val globalMetadata: GlobalMetadata
@@ -118,6 +119,7 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 
 		// set up AM Apps
 		amAppList = AMAppList(carConnection, graphicsHelpers, "me.hufman.androidautoidrive.music")
+		homeAppList = AMAppList(carConnection, graphicsHelpers, "me.hufman.androidautoidrive.music.home")
 
 		musicAppDiscovery.listener = Runnable {
 			// make sure the car has AV Context
@@ -228,6 +230,9 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 			}
 		}
 		amAppList.setApps(amApps)
+		// ConnectedDrive and Media have separate registrations. The former can carry
+		// the phone app's own label/icon without modifying BMW's signed resources.
+		homeAppList.setApps(listOfNotNull(MusicHomeAppInfo.preferred(musicAppDiscovery.allApps)))
 	}
 
 	inner class CarAppListener(val cdsEventHandler: CDSEventHandler): BaseBMWRemotingClient() {
@@ -313,7 +318,8 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 		override fun am_onAppEvent(handle: Int?, ident: String?, appId: String?, event: BMWRemoting.AMEvent?) {
 			Log.i(TAG, "Received am_onAppEvent: handle=$handle ident=$ident appId=$appId event=$event")
 			appId ?: return
-			val appInfo = amAppList.getAppInfo(appId) ?: return
+			val homeApp = homeAppList.getAppInfo(appId)
+			val appInfo = homeApp?.musicApp ?: amAppList.getAppInfo(appId) ?: return
 			avContext.av_requestContext(appInfo)
 			val focusEvent = app?.events?.values?.filterIsInstance<RHMIEvent.FocusEvent>()?.sortedBy { it.id }?.firstOrNull()
 			try {
@@ -328,7 +334,8 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 				}
 			}
 			synchronized(server!!) {
-				amAppList.redrawApp(appInfo)
+				if (homeApp != null) homeAppList.redrawApp(homeApp)
+				else amAppList.redrawApp(appInfo)
 			}
 		}
 
@@ -356,11 +363,11 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 
 					if (musicController.currentAppController != null) {
 						// wait for any hmi context changes to filter through
-						if (musicAppMode.supportsId5Playback() && !bookmarkButton) {
+						if (playbackId5View != null && !bookmarkButton) {
 							Thread.sleep(50)
 						}
 						// invoked manually, not by the Media shortcut button
-						if (musicAppMode.supportsId5Playback() && (bookmarkButton || contextTracker.isIntentionalSpotifyClick())) {
+						if (playbackId5View != null && (bookmarkButton || contextTracker.isIntentionalSpotifyClick())) {
 							// there's no spotify AM icon for the user to push
 							// so handle this spotify icon push
 							// but only if the user has dwelled on a screen for a second

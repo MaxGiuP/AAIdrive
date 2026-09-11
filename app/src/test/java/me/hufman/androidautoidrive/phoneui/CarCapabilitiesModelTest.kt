@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import org.mockito.kotlin.*
 import me.hufman.androidautoidrive.CarInformation
+import me.hufman.androidautoidrive.AppSettings
+import me.hufman.androidautoidrive.MockAppSettings
 import me.hufman.androidautoidrive.R
+import io.bimmergestalt.idriveconnectkit.android.IDriveConnectionStatus
 import me.hufman.androidautoidrive.carapp.music.MusicAppMode
 import me.hufman.androidautoidrive.phoneui.viewmodels.CarCapabilitiesViewModel
 import org.junit.Assert.assertEquals
@@ -70,7 +73,7 @@ class CarCapabilitiesModelTest {
 		verify(context).getString(R.string.txt_capabilities_audiocontext_hint)
 
 		context.run(viewModel.audioStateStatus.value!!)
-		verify(context).getString(R.string.txt_capabilities_audiostate_no)
+		verify(context).getString(R.string.txt_capabilities_audiostate_standard)
 		context.run(viewModel.audioStateHint.value!!)
 		verify(context).getString(R.string.txt_capabilities_audiostate_id4)
 
@@ -107,7 +110,7 @@ class CarCapabilitiesModelTest {
 		verifyNoMoreInteractions(context)
 
 		context.run(viewModel.audioStateStatus.value!!)
-		verify(context).getString(R.string.txt_capabilities_audiostate_no)
+		verify(context).getString(R.string.txt_capabilities_audiostate_standard)
 		context.run(viewModel.audioStateHint.value!!)
 		verify(context).getString(R.string.txt_capabilities_audiostate_id4)
 	}
@@ -180,13 +183,13 @@ class CarCapabilitiesModelTest {
 		verify(context).getString(R.string.txt_capabilities_audiocontext_hint)
 
 		context.run(viewModel.audioStateStatus.value!!)
-		verify(context).getString(R.string.txt_capabilities_audiostate_no)
+		verify(context).getString(R.string.txt_capabilities_audiostate_standard)
 		context.run(viewModel.audioStateHint.value!!)
 		verify(context).getString(R.string.txt_capabilities_audiostate_audiocontext)
 	}
 
 	@Test
-	fun testId5Spotify() {
+	fun testId5StandardLayoutOffersExplicitOptIn() {
 		val carInfo = mock<CarInformation> {
 			on { connectionBrand } doReturn "mini"
 			on { capabilities } doReturn mapOf("hmi.type" to "MINI ID5", "tts" to "false", "navi" to "true")
@@ -214,11 +217,40 @@ class CarCapabilitiesModelTest {
 		verifyNoMoreInteractions(context)
 
 		context.run(viewModel.audioStateStatus.value!!)
-		verify(context).getString(R.string.txt_capabilities_audiostate_no)
+		verify(context).getString(R.string.txt_capabilities_audiostate_standard)
 		context.run(viewModel.audioStateHint.value!!)
-		verify(context).getString(R.string.txt_capabilities_audiostate_spotify)
+		verify(context).getString(R.string.txt_capabilities_audiostate_optin)
 	}
 
+
+	@Test
+	fun installedSpotifyDoesNotMakeDiagnosticsClaimTheOptionalLayoutIsEnabled() {
+		val capabilities = mapOf("hmi.type" to "BMW ID6")
+		val carInfo = mock<CarInformation> {
+			on { connectionBrand } doReturn "bmw"
+			on { this.capabilities } doReturn capabilities
+		}
+		val connection = mock<IDriveConnectionStatus> {
+			on { host } doReturn "127.0.0.1"
+			on { port } doReturn 4007
+		}
+		val settings = MockAppSettings()
+		val mode = MusicAppMode(connection, capabilities, settings, true, null, null, "9.1.0")
+		val viewModel = CarCapabilitiesViewModel(carInfo, mode).apply { update() }
+		assertEquals(true, viewModel.isAudioContextSupported.value)
+		assertEquals(false, viewModel.isAudioStateSupported.value)
+		context.run(viewModel.audioStateStatus.value!!)
+		verify(context).getString(R.string.txt_capabilities_audiostate_standard)
+		context.run(viewModel.audioStateHint.value!!)
+		verify(context).getString(R.string.txt_capabilities_audiostate_optin)
+		verify(context, never()).getString(R.string.txt_capabilities_audiostate_spotify)
+
+		settings[AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT] = "true"
+		viewModel.update()
+		assertEquals(true, viewModel.isAudioStateSupported.value)
+		context.run(viewModel.audioStateStatus.value!!)
+		verify(context).getString(R.string.txt_capabilities_audiostate_yes)
+	}
 
 	@Test
 	fun testId5Classic() {

@@ -97,16 +97,9 @@ class MusicAppMode(val iDriveConnectionStatus: IDriveConnectionStatus, val capab
 						(spotifySplits[0] == 8 && spotifySplits[1] == 5 && spotifySplits[2] >= 68)
 				)
 	}
-	/** Whether to automatically start Spotify mode, ignoring from any advanced settings */
-	fun heuristicAudioState(): Boolean {
-		val isSpotifyNotEnabled = spotifyVersion != null && !isConnectedInstalled
-		return !isId4() && (isSpotifyNotEnabled || isNewSpotifyInstalled()) && shouldRequestAudioContext()
-	}
-	/** Whether the current mode starts Spotify mode, including the forced advanced setting */
+	/** The Spotify-branded layout is an explicit advanced opt-in, never selected by installed apps. */
 	fun supportsId5Playback(): Boolean {
-		val manualOverride = !isId4() && appSettings[AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT].toBoolean()
-		val autodetect = heuristicAudioState()
-		return manualOverride || autodetect
+		return !isId4() && appSettings[AppSettings.KEYS.FORCE_SPOTIFY_LAYOUT].toBoolean()
 	}
 	/** Whether to show the Spotify playback view or Audioplayer mode, even if running in Spotify mode */
 	fun shouldId5Playback(): Boolean {

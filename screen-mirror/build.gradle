@@ -15,7 +15,7 @@ android {
         compileSdk 35
         minSdkVersion 23
         targetSdkVersion 35
-        versionCode 2
+        versionCode 3
         versionName "0.2.0-" + providers.exec { commandLine 'git', 'rev-parse', '--short=7', 'HEAD' }.standardOutput.asText.get().trim()
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

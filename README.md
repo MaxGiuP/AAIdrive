@@ -26,9 +26,11 @@ not been tested on the target Pixel/BMW. No Google Maps API key is needed for th
 projection path.
 
 This is [MaxGiuP's fork](https://github.com/MaxGiuP/AAIdrive), with YouTube Music
-ReVanced as the preferred player on a fresh setup and improvements for Audible,
-Rumble, and YouTube ReVanced. See the [fork setup and compatibility notes](docs/maxgiup-media.md)
-and [APK download](apk/README.md).
+ReVanced as the preferred player on a fresh setup and its own ConnectedDrive/Online
+Services shortcut. Music uses the standard multimedia layout by default, with the
+published playlist available inside AAIdrive. The Spotify-branded native iDrive 5+
+layout is an explicit advanced option. Audible, Rumble, and YouTube ReVanced also
+receive compatibility improvements. See the [media setup and compatibility notes](docs/maxgiup-media.md).
 
 The fork also includes [performance, reliability, and Google Maps sharing improvements](docs/maxgiup-improvements.md).
 
