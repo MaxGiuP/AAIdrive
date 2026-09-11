@@ -1,0 +1,86 @@
+{
+  "artifact": "AAIdrive-Setup.apk",
+  "apk_sha256": "4e8308c907b05f9b8a5069c74ffcd01c4f4928719efab9365b5b0e70450bcc3b",
+  "source_commit": "b72475e14b3e2f5507a14cce8d4019a30693f2df",
+  "version_name": "0.2.0-b72475e",
+  "version_code": 4,
+  "tested_at_utc": "2026-09-11T02:11:15.627015+00:00",
+  "environment": {
+    "type": "Android Emulator",
+    "android_api": 35,
+    "abi": "x86_64",
+    "image": "system-images;android-35;google_apis;x86_64",
+    "wifi_enabled": false,
+    "mobile_data_enabled": false
+  },
+  "result": "passed",
+  "checks": [
+    {
+      "name": "setup_upgrade",
+      "result": "passed",
+      "details": "Installed Setup over version 0.1.0-9184a3f without uninstalling it; existing installer permission was retained."
+    },
+    {
+      "name": "offline_component_updates",
+      "result": "passed",
+      "details": "Install everything updated AAIdrive from code 10404005 to 10404008 and Projection from code 2 to 5 through the real Android update prompts, using bundled APKs."
+    },
+    {
+      "name": "cancel_and_resume_update",
+      "result": "passed",
+      "details": "Cancelled the Projection update after AAIdrive completed. Setup stopped, kept both installed apps, then resumed at Projection without reinstalling AAIdrive."
+    },
+    {
+      "name": "unchanged_component_skipped",
+      "result": "passed",
+      "details": "Existing Open Headunit 3.4.0-beta1 was recognized and skipped."
+    },
+    {
+      "name": "native_app_setup",
+      "result": "passed",
+      "details": "Displayed BMW connection/notification steps, installed stock YouTube Music and YouTube Open actions, missing Audible/Rumble source actions, and the separate native BMW navigation section."
+    },
+    {
+      "name": "installed_maps_launch",
+      "result": "passed",
+      "details": "Open Google Maps displayed Maps search/explore UI and resumed com.google.android.apps.maps/com.google.android.maps.MapsActivity."
+    },
+    {
+      "name": "optional_projection_section",
+      "result": "passed",
+      "details": "Projection instructions started collapsed, expanded only on Show projection setup, and disappeared on Hide projection setup. No projection session was started."
+    },
+    {
+      "name": "restart_recognizes_installed_apps",
+      "result": "passed",
+      "details": "Force-stopped and reopened Setup; it reported all three components ready and disabled Install everything without opening an installation prompt."
+    }
+  ],
+  "installed_apps": [
+    {
+      "package_name": "me.hufman.androidautoidrive",
+      "version_code": 10404008,
+      "version_name": "1.4.4-19-b72475e"
+    },
+    {
+      "package_name": "io.github.maxgiup.aaidrive.projection",
+      "version_code": 5,
+      "version_name": "0.2.0-b72475e"
+    },
+    {
+      "package_name": "io.github.maxgiup.aaidrive.setup",
+      "version_code": 4,
+      "version_name": "0.2.0-b72475e"
+    },
+    {
+      "package_name": "com.andrerinas.headunitrevived",
+      "version_code": 106,
+      "version_name": "3.4.0-beta1"
+    }
+  ],
+  "physical_phone_tested": false,
+  "car_tested": false,
+  "android_auto_projection_tested": false,
+  "audio_routing_tested": false,
+  "scope": "Installer upgrade and native setup UI smoke check only. No physical BMW/Pixel, media-session playback, native navigation handoff, or measured car performance."
+}

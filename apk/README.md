@@ -1,11 +1,11 @@
 # One APK to set everything up
 
-**[Download AAIdrive-Setup.apk — 23.46 MB](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk)**
+**[Download AAIdrive-Setup.apk — 23.49 MB](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk)**
 
 Install and open this single APK, then tap **Install everything**. It includes:
 
-- AAIdrive `1.4.4-16-bd52f6f` with the media and native BMW navigation improvements.
-- AAIdrive Projection `0.2.0-bd52f6f` for the experimental car display connection.
+- AAIdrive `1.4.4-19-b72475e` with the media and native BMW navigation improvements.
+- AAIdrive Projection `0.2.0-b72475e` for the experimental car display connection.
 - The unchanged, upstream-signed Open Headunit `3.4.0-beta1` receiver.
 
 The three components install offline from the setup APK. Android still requires its
@@ -14,24 +14,39 @@ apps. Setup skips compatible installed versions, verifies APKs before handing th
 to Android, handles cancellation, and preserves existing apps when signing keys conflict.
 It never uninstalls another app or removes its settings.
 
-Setup then guides AAIdrive permissions, Open Headunit configuration, Android Auto's
-headunit server and screen sharing. Google's Android Auto and Google Maps apps are
-usually already on the phone. They are not repackaged; setup links to Google Play
-if either is missing. Installing those Google apps needs internet.
+Setup starts with native BMW Apps: AAIdrive connection and notification permissions,
+your installed music/audio apps, and sharing Google Maps destinations to
+**BMW/MINI Navigation**. It recognizes supported YouTube Music/ReVanced, Audible,
+YouTube/ReVanced and Rumble variants, with Open or Enable actions. Missing apps
+have official ReVanced instructions or Google Play links; downloading them needs
+internet. Patched media APKs and Google's apps are not bundled.
 
-Follow the [one-APK setup guide](../docs/one-apk-setup.md). No Google Maps API key is
+Android Auto projection has its own optional, collapsed setup section for
+Open Headunit, the headunit server and screen sharing. Ordinary music controls
+and native BMW navigation do not require that projection setup.
+
+Follow the [one-APK setup guide](../docs/one-apk-setup.md) and
+[BMW Apps music/navigation guide](../docs/bmw-apps.md). No Google Maps API key is
 required. Android Auto projection remains experimental, and actual BMW latency,
 audio and controls need testing on the phone/car. Bluetooth can limit smoothness.
 
 ## Build and verification
 
-Setup version: `0.1.0-bd52f6f` (version code `3`).
+Setup version: `0.2.0-b72475e` (version code `4`).
 All three fork APKs were built from
-[`bd52f6f9`](https://github.com/MaxGiuP/AAIdrive/commit/bd52f6f9b67a070de4a554300fcf482b710ba581).
-The build passed **597 main app + 58 projection + 25 installer unit tests**,
-plus 6 packaging checks and 8 diagnostics checks. Signatures, alignment, APK/source identities, update paths
+[`b72475e1`](https://github.com/MaxGiuP/AAIdrive/commit/b72475e14b3e2f5507a14cce8d4019a30693f2df).
+The build passed **608 main app + 58 projection + 36 installer unit tests** (702 total),
+plus 6 packaging checks and 12 diagnostics checks. Signatures, alignment, APK/source identities, update paths
 and the exact three APKs embedded in Setup were verified.
 The [installer build record](setup-build-info.json) lists each bundled checksum and signer.
+
+Current runtime check: Setup `0.2.0-b72475e` passed an Android 35 emulator upgrade
+over the earlier fork. With networking disabled, it updated AAIdrive and Projection,
+handled cancellation/resume, and skipped the unchanged Open Headunit. The new
+native-app setup, installed Google Maps launch, optional projection expansion,
+and recognition of installed components after restarting also passed. The
+[runtime record](test-history/setup-emulator-b72475e.json) binds these checks to
+this APK's hash. Actual BMW media controls and navigation were not tested by the emulator.
 
 Historical runtime check: Setup `0.1.0-9184a3f` passed on an Android 35 x86_64
 emulator with networking disabled: install-source permission, cancellation,
@@ -41,7 +56,7 @@ applies only to its recorded APK hash and source commit. Later APKs require thei
 own runtime check; physical Pixel/BMW projection performance remains untested.
 
 Fork APKs use a local Android development signing certificate. The main APK uses
-version code `10404007` and Projection `4`, with the same certificate as
+version code `10404008` and Projection `5`, with the same certificate as
 previous fork releases. Open Headunit keeps its original upstream certificate.
 Private signing keys are excluded from this repository. Official AAIdrive builds
 with a different signer cannot be updated by this fork; setup reports the conflict
