@@ -55,6 +55,15 @@ LOG_TAGS = (
     "CarProber", "MainService", "MusicSessions", "MusicAppDiscovery",
     "MusicBrowser", "MusicMetadata", "GenericMusicController", "ScreenMirroring",
 )
+PROJECTION_FIELDS = (
+    "window_ms", "width", "height", "interval_ms", "quality", "frames", "sent",
+    "unchanged", "jpeg_duplicates", "bytes", "sends_per_s", "avg_bytes",
+    "copy_ms", "encode_ms", "send_ms",
+)
+PROJECTION_INTEGERS = set(PROJECTION_FIELDS[:10])
+PROJECTION_PATTERN = re.compile("ProjectionPerf " + " ".join(
+    field + (r"=(\d+)" if field in PROJECTION_INTEGERS else r"=(\d+(?:\.\d+)?)")
+    for field in PROJECTION_FIELDS))
 
 
 class CollectionError(Exception):
@@ -163,6 +172,7 @@ def summarize_logs(output):
     found_sessions = set()
     last_transport = None
     last_queue_id = None
+    projection_samples = []
     for line in output.splitlines():
         match = re.fullmatch(r"[VDIWEF]/([^()]+)\(\s*\d+\):\s?(.*)", line)
         if not match:
@@ -210,12 +220,21 @@ def summarize_logs(output):
                 counts["playback_queue_id_observed"] += 1
         elif tag == "GenericMusicController" and message.startswith("Received DeadObjectException from MediaController "):
             counts["media_session_disconnected"] += 1
-        elif tag == "ScreenMirroring" and message in ("Screen mirror frame failed", "Failed to create mirror display"):
-            counts["projection_failure"] += 1
+        elif tag == "ScreenMirroring":
+            if message in ("Screen mirror frame failed", "Failed to create mirror display"):
+                counts["projection_failure"] += 1
+            sample = PROJECTION_PATTERN.fullmatch(message)
+            if sample:
+                projection_samples.append({
+                    field: int(value) if field in PROJECTION_INTEGERS else float(value)
+                    for field, value in zip(PROJECTION_FIELDS, sample.groups())
+                })
+                projection_samples = projection_samples[-12:]
     return {"event_counts": dict(sorted(counts.items())),
             "known_session_packages_observed": sorted(found_sessions),
             "last_connection_observed": last_transport,
             "last_active_queue_id_observed_unattributed": last_queue_id,
+            "projection_samples": projection_samples,
             "observation_scope": "Recent buffered logs, possibly from earlier connections; not live state."}
 
 

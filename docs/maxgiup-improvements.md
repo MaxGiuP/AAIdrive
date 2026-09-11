@@ -50,6 +50,23 @@ Google's [Maps URLs interface](https://developers.google.com/maps/documentation/
 does not require an API key. Address lookup still needs the phone's geocoder and
 short links require a network connection.
 
+## Projection work and diagnostics
+
+The [Android Auto projection add-on](android-auto-projection.md) retains the car's
+reported display dimensions. It reuses two bitmaps to compare captured pixels and
+skips JPEG compression and transmission for unchanged images.
+
+Bluetooth JPEG quality adapts within 25–30 after repeated slow sends and gradually
+recovers after sustained faster sends. The frame-rate caps remain 4 fps on Bluetooth
+and 10 fps on other transports, with the existing 1 fps throttle while moving when
+Android is outside car mode.
+
+Numerical frame summaries enter diagnostics at most every five seconds during
+capture processing. They report image dimensions, quality, frame counts, skipped
+compression, bytes, and copy/encode/send timing without images or app/navigation
+text. These local measurements help diagnose the connection; measured BMW display
+latency, sustained refresh rate and physical phone/car compatibility remain unverified.
+
 ## Embedded maps and Android Auto
 
 This APK uses AAIdrive's `nomap` variant. It sends destinations to the

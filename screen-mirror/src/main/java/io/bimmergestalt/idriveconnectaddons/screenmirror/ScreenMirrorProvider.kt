@@ -27,8 +27,10 @@ class ScreenMirrorProvider(val handler: Handler) {
     private val outputSize = Point(100, 100)
     private val schedule = FrameSchedule()
     private val pixels = RgbaFrameBuffer()
+    private val bitmaps = ReusableCaptureBitmaps()
+    private val bluetoothQuality = BluetoothJpegQuality()
+    private val frameStats = ProjectionFrameStats()
     private val jpg = ByteArrayOutputStream()
-    private var bitmap: Bitmap? = null
     private var imageReader: ImageReader? = null
     private var display: VirtualDisplay? = null
     private var projection: MediaProjection? = null
@@ -39,6 +41,7 @@ class ScreenMirrorProvider(val handler: Handler) {
 
     @Volatile var minFrameTime = 100
     @Volatile var jpgQuality = 60
+    @Volatile var bluetoothConnection = false
     var callback: ((ByteArray) -> Unit)? = null
     var onStateChanged: ((MirroringState) -> Unit)? = null
 
@@ -69,6 +72,9 @@ class ScreenMirrorProvider(val handler: Handler) {
         if (!stopped) {
             focused = true
             lastSentFrame = null
+            bitmaps.resetComparison()
+            bluetoothQuality.reset()
+            frameStats.reset(SystemClock.uptimeMillis())
             val available = ProjectionSession.currentProjection
             if (projection !== available) projectionListener(available)
             if (display == null) {
@@ -86,6 +92,8 @@ class ScreenMirrorProvider(val handler: Handler) {
     private fun pauseCapture() {
         focused = false
         lastSentFrame = null
+        bitmaps.resetComparison()
+        frameStats.reset()
         handler.removeCallbacks(poll)
         schedule.reset()
         display?.surface = null
@@ -129,8 +137,9 @@ class ScreenMirrorProvider(val handler: Handler) {
             display = null
             imageReader?.close()
             imageReader = null
-            bitmap?.recycle()
-            bitmap = null
+            bitmaps.clear()
+            bluetoothQuality.reset()
+            frameStats.reset()
             pixels.clear()
             jpg.reset()
         }
@@ -172,6 +181,7 @@ class ScreenMirrorProvider(val handler: Handler) {
             }
             imageReader = reader
             display = created
+            frameStats.reset(SystemClock.uptimeMillis())
             reader.setOnImageAvailableListener(imageListener, handler)
             updateState(MirroringState.ACTIVE)
             schedulePoll()
@@ -199,6 +209,7 @@ class ScreenMirrorProvider(val handler: Handler) {
             return
         }
         try {
+            val captureStarted = SystemClock.uptimeMillis()
             val captured = imageReader?.acquireLatestImage()
             if (captured == null) {
                 schedulePoll(1000)
@@ -206,15 +217,37 @@ class ScreenMirrorProvider(val handler: Handler) {
             }
             schedule.onFrame(SystemClock.uptimeMillis())
             val frame = try { copyImage(captured) } finally { captured.close() }
+            val unchanged = bitmaps.isUnchanged(frame)
+            val captureCopyMs = SystemClock.uptimeMillis() - captureStarted
+            val quality = if (bluetoothConnection) bluetoothQuality.quality else jpgQuality.coerceIn(0, 100)
+            // Compare the captured pixels before spending CPU on JPEG compression.
+            // Separate reusable bitmaps keep the previous pixels intact during capture.
+            if (unchanged) {
+                recordFrame(quality, captureCopyMs, 0, 0, 0, unchanged = true)
+                schedulePoll()
+                return
+            }
             // The ImageReader buffer is free before compression or the slower synchronous car RPC.
+            val encodeStarted = SystemClock.uptimeMillis()
             jpg.reset()
-            check(frame.compress(Bitmap.CompressFormat.JPEG, jpgQuality.coerceIn(0, 100), jpg))
+            check(frame.compress(Bitmap.CompressFormat.JPEG, quality, jpg))
             if (projection === ProjectionSession.currentProjection) {
                 val bytes = jpg.toByteArray()
+                val encodeMs = SystemClock.uptimeMillis() - encodeStarted
                 val consumer = callback
-                if (consumer != null && lastSentFrame?.contentEquals(bytes) != true) {
-                    consumer(bytes)
-                    lastSentFrame = bytes
+                if (consumer != null) {
+                    val duplicate = lastSentFrame?.contentEquals(bytes) == true
+                    var sendMs = 0L
+                    if (!duplicate) {
+                        val sendStarted = SystemClock.uptimeMillis()
+                        consumer(bytes)
+                        sendMs = SystemClock.uptimeMillis() - sendStarted
+                        lastSentFrame = bytes
+                        if (bluetoothConnection) bluetoothQuality.onFrameSent(sendMs)
+                    }
+                    bitmaps.rememberEncoded(frame)
+                    recordFrame(quality, captureCopyMs, encodeMs, sendMs,
+                        if (duplicate) 0 else bytes.size, jpegDuplicate = duplicate)
                 }
             }
             schedulePoll()
@@ -230,12 +263,13 @@ class ScreenMirrorProvider(val handler: Handler) {
     private fun copyImage(image: Image): Bitmap {
         val plane = image.planes[0]
         val buffer = pixels.prepare(plane.buffer, image.width, image.height, plane.pixelStride, plane.rowStride)
-        val output = bitmap?.takeIf { it.width == image.width && it.height == image.height }
-            ?: Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888).also {
-                bitmap?.recycle()
-                bitmap = it
-            }
-        output.copyPixelsFromBuffer(buffer)
-        return output
+        return bitmaps.copyFrom(buffer, image.width, image.height)
+    }
+
+    private fun recordFrame(quality: Int, captureCopyMs: Long, encodeMs: Long, sendMs: Long,
+                            sentBytes: Int, unchanged: Boolean = false, jpegDuplicate: Boolean = false) {
+        frameStats.reportFrame(SystemClock.uptimeMillis(), outputSize.x, outputSize.y,
+            minFrameTime, quality, captureCopyMs, encodeMs, sendMs, sentBytes, unchanged, jpegDuplicate)
+            ?.let { Log.i(TAG, it.logLine()) }
     }
 }

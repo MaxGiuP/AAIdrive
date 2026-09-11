@@ -50,6 +50,13 @@ Connection observations come from recent buffered logs and may describe an older
 connection. Transport is inferred from AAIdrive's known port mapping; absence of
 an observation does not mean the car is disconnected.
 
+During projection, the updated app logs numeric pipeline measurements about every
+five seconds. The collector keeps up to 12 recent samples: capture dimensions,
+configured interval, JPEG quality, byte counts, unchanged frames, and average
+copy/encoding/send times. `sends_per_s` measures completed local sends, not the
+car's actual refresh rate. A static picture intentionally needs few or no new
+sends. Empty samples can mean projection was inactive or an older build is installed.
+
 For the BMW software details, enable **Show Advanced Settings** in AAIdrive, open
 **Car Info**, and copy only `hmi.type`, `hmi.version`, `hmi.display-width`,
 `hmi.display-height`, `navi`, `map`, and `tts` from **Detailed Car Capabilities**.

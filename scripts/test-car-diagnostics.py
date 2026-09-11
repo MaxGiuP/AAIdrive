@@ -136,6 +136,17 @@ I/CarProber( 12): carCapabilities hmi.type=BMW location=PRIVATE_HOME
                 self.assertEqual(0o600, path.stat().st_mode & 0o777)
                 self.assertEqual(0o700, path.parent.stat().st_mode & 0o777)
 
+    def test_projection_samples_are_bounded_numeric_and_reject_trailing_text(self):
+        sample = ("I/ScreenMirroring( 12): ProjectionPerf window_ms=5000 width=800 height=480 "
+                  "interval_ms=250 quality=25 frames=20 sent=10 unchanged=8 jpeg_duplicates=2 "
+                  "bytes=100000 sends_per_s=2.00 avg_bytes=10000.0 copy_ms=1.00 encode_ms=5.00 send_ms=190.00")
+        result = diagnostics.summarize_logs("\n".join([sample] * 15 + [sample + " PRIVATE_TOKEN"]))
+        self.assertEqual(12, len(result["projection_samples"]))
+        self.assertEqual(190.0, result["projection_samples"][0]["send_ms"])
+        self.assertEqual(8, result["projection_samples"][0]["unchanged"])
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        self.assertEqual([], diagnostics.summarize_logs(sample + " PRIVATE_TOKEN")["projection_samples"])
+
 
 if __name__ == "__main__":
     unittest.main()

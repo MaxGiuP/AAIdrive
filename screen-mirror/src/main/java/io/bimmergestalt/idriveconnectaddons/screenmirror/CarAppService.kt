@@ -96,10 +96,7 @@ class CarAppService: Service() {
                 val screenMirrorProvider = ScreenMirrorProvider(worker.handler!!).also { ownedProvider = it }
                 val baselineFrameTime = if (iDriveConnectionStatus.port == 4007) 250 else 100
                 screenMirrorProvider.minFrameTime = baselineFrameTime
-                if (iDriveConnectionStatus.port == 4007) {
-                    // running over bluetooth, decimate image quality
-                    screenMirrorProvider.jpgQuality = 30
-                }
+                screenMirrorProvider.bluetoothConnection = iDriveConnectionStatus.port == 4007
                 val controller = OpenHeadunitController(applicationContext).also { ownedController = it }
                 ownedApp = CarApp(
                     iDriveConnectionStatus,
