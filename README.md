@@ -1,11 +1,29 @@
-> **MaxGiuP fork:** [Download one Setup APK](https://github.com/MaxGiuP/AAIdrive/raw/refs/heads/main/apk/AAIdrive-Setup.apk)
-> containing AAIdrive, Projection and Open Headunit. Its guided installer handles the
-> three components with Android's required confirmations. See [one-APK setup](docs/one-apk-setup.md).
-> Media improvements and native BMW destination sharing are included. Android Auto
-> projection remains experimental and requires phone/car setup; no Google Maps API key is needed.
-
 AAIdrive
 ========
+
+## [Download Setup APK](https://raw.githubusercontent.com/MaxGiuP/AAIdrive/main/apk/AAIdrive-Setup.apk)
+
+**One download for your Android phone: AAIdrive, Projection and Open Headunit.**
+
+1. **[Download AAIdrive-Setup.apk](https://raw.githubusercontent.com/MaxGiuP/AAIdrive/main/apk/AAIdrive-Setup.apk)** on your phone.
+2. Open the downloaded APK and install it. Allow installation from your browser or file manager if Android asks.
+3. Open **AAIdrive Setup**, tap **Install everything**, and follow Android's permission and installation prompts.
+
+**No ZIP, extraction or computer needed.** Setup contains the three component APKs
+and installs them as separate apps. Then follow its phone/car configuration steps.
+Google's Android Auto and Google Maps apps are not bundled; Setup links to Google
+Play if they are missing.
+
+**Already have AAIdrive?** Keep it installed and let Setup check it first. If Setup
+reports a signing conflict, note your settings before manually uninstalling the old
+AAIdrive, then return to Setup. Uninstalling clears AAIdrive's local settings; Setup
+never removes an existing app automatically.
+
+[Full installation and car setup guide](docs/one-apk-setup.md) · [Individual APKs and checksums](apk/README.md)
+
+Android Auto projection is experimental and still needs phone/car setup. It has
+not been tested on the target Pixel/BMW. No Google Maps API key is needed for this
+projection path.
 
 This is [MaxGiuP's fork](https://github.com/MaxGiuP/AAIdrive), with YouTube Music
 ReVanced as the preferred player on a fresh setup and improvements for Audible,
@@ -17,12 +35,12 @@ The fork also includes [performance, reliability, and Google Maps sharing improv
 [![Build Status](https://img.shields.io/github/actions/workflow/status/BimmerGestalt/AAIdrive/android-build.yml?branch=main)](https://github.com/BimmerGestalt/AAIdrive/actions?query=workflow%3Abuild)
 [![Code Coverage](https://img.shields.io/codecov/c/gh/BimmerGestalt/AAIdrive/main.svg)](https://codecov.io/gh/BimmerGestalt/AAIdrive)
 [![Crowdin](https://badges.crowdin.net/androidautoidrive/localized.svg)](https://crowdin.com/project/androidautoidrive)
-[![Release Download](https://img.shields.io/github/release/BimmerGestalt/AAIdrive.svg)](https://github.com/BimmerGestalt/AAIdrive/releases/latest)
+[![Download Setup APK](https://img.shields.io/badge/Download-Setup_APK-2ea44f?style=for-the-badge&logo=android)](https://raw.githubusercontent.com/MaxGiuP/AAIdrive/main/apk/AAIdrive-Setup.apk)
 [![Gitter](https://badges.gitter.im/AndroidAutoIdrive/community.svg)](https://gitter.im/AndroidAutoIdrive/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![Buy Me A Coffee](https://img.shields.io/badge/support-buymeacoffee-5f7fff)](https://www.buymeacoffee.com/q4JVoxz)
 ![MIT Licensed](https://img.shields.io/github/license/BimmerGestalt/AAIdrive)
 
-<a href="https://play.google.com/store/apps/details?id=me.hufman.androidautoidrive"><img height="60" alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"/></a>
+The original upstream app is also on [Google Play](https://play.google.com/store/apps/details?id=me.hufman.androidautoidrive). Use the **Setup APK above** for this fork and its bundled components.
 
 The BMW/Mini IDrive NBT does not offer native Android Auto integration, but does provide a very powerful Connected Apps convergence option with tight integration points into the car. This project is an effort to implement most of the features of Android Auto as unofficial BMW/Mini Connected Apps.
 
@@ -43,10 +61,7 @@ Getting Started
 
 This app requires that the MyBMW or MINI app for your car is installed and that it can successfully enable your ID5+ car's [Apps checkbox](app/src/main/res-facets/tips/drawable/pic_btapp_bmw.jpg), or if your ID4 car has the [Connection Assistant option](app/src/main/res-facets/tips/drawable/pic_connassistant_bmw.jpg).
 
-Download the APK of the latest stable release from the [Releases page](https://github.com/BimmerGestalt/AAIdrive/releases/latest). Choose the one that says "sentry" to automatically upload crash reports, or choose "nonalytics" otherwise. It is also available on the [Google Play Store](https://play.google.com/store/apps/details?id=me.hufman.androidautoidrive). After starting, the app should detect the MyBMW app and start waiting for the car connection.
-
-Also consider trying out the nightly build! It has the latest features and is a preview of the next release, so please consider installing the [nightly sentry build](https://bimmergestalt.s3.amazonaws.com/aaidrive/builds/androidautoidrive-latest-main-mapbox-sentry-release.apk) to automatically report crashes.
-The [nightly nonalytics build](https://bimmergestalt.s3.amazonaws.com/aaidrive/builds/androidautoidrive-latest-main-mapbox-nonalytics-release.apk) is available too.
+Install this fork using the **[Setup APK](https://raw.githubusercontent.com/MaxGiuP/AAIdrive/main/apk/AAIdrive-Setup.apk)** and the steps above. Open AAIdrive from Setup and complete its permissions and connection steps. The app should detect MyBMW and wait for the car connection. For Android Auto projection, continue with the [full setup guide](docs/one-apk-setup.md).
 
 Check out the [FAQ](https://bimmergestalt.github.io/AAIdrive/faq.html) if you run into problems.
 

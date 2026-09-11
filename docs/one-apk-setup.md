@@ -12,7 +12,7 @@ No additional download is needed to install these three bundled components.
    apps, then return to setup and continue.
 3. Confirm Android's install prompts for the components. Setup checks what actually
    installed before proceeding. Compatible installed versions are skipped. Cancelling
-   a prompt pauses installation; use Continue when ready. A differently signed app
+   a prompt pauses installation; tap **Install everything** again when ready. A differently signed app
    is reported as a conflict; setup never uninstalls it or erases its settings.
 4. Open AAIdrive through setup, complete its permissions and car connection steps,
    and check that its apps appear on iDrive. Keep the phone's Bluetooth media output
