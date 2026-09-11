@@ -4,8 +4,8 @@
 
 Install and open this single APK, then tap **Install everything**. It includes:
 
-- AAIdrive `1.4.4-14-ac4a3dd-dirty` with the media and native BMW navigation improvements.
-- AAIdrive Projection `0.2.0-ac4a3dd` for the experimental car display connection.
+- AAIdrive `1.4.4-16-bd52f6f` with the media and native BMW navigation improvements.
+- AAIdrive Projection `0.2.0-bd52f6f` for the experimental car display connection.
 - The unchanged, upstream-signed Open Headunit `3.4.0-beta1` receiver.
 
 The three components install offline from the setup APK. Android still requires its
@@ -25,15 +25,15 @@ audio and controls need testing on the phone/car. Bluetooth can limit smoothness
 
 ## Build and verification
 
-Setup version: `0.1.0-ac4a3dd` (version code `2`).
+Setup version: `0.1.0-bd52f6f` (version code `3`).
 All three fork APKs were built from
-[`ac4a3ddd`](https://github.com/MaxGiuP/AAIdrive/commit/ac4a3ddd1017b3f951e5371835060cf7593769a9).
-The build passed **597 main app + 39 projection + 25 installer unit tests**,
-plus 6 packaging checks and 7 diagnostics checks. Signatures, alignment, APK/source identities, update paths
+[`bd52f6f9`](https://github.com/MaxGiuP/AAIdrive/commit/bd52f6f9b67a070de4a554300fcf482b710ba581).
+The build passed **597 main app + 58 projection + 25 installer unit tests**,
+plus 6 packaging checks and 8 diagnostics checks. Signatures, alignment, APK/source identities, update paths
 and the exact three APKs embedded in Setup were verified.
 The [installer build record](setup-build-info.json) lists each bundled checksum and signer.
 
-Historical runtime check: Setup `0.1.0-ac4a3dd` passed on an Android 35 x86_64
+Historical runtime check: Setup `0.1.0-bd52f6f` passed on an Android 35 x86_64
 emulator with networking disabled: install-source permission, cancellation,
 resume, skipping an already installed component, and all three component
 installations. The [archived emulator test record](test-history/setup-emulator-9184a3f.json)
@@ -41,7 +41,7 @@ applies only to its recorded APK hash and source commit. Later APKs require thei
 own runtime check; physical Pixel/BMW projection performance remains untested.
 
 Fork APKs use a local Android development signing certificate. The main APK uses
-version code `10404006` and Projection `3`, with the same certificate as
+version code `10404007` and Projection `4`, with the same certificate as
 previous fork releases. Open Headunit keeps its original upstream certificate.
 Private signing keys are excluded from this repository. Official AAIdrive builds
 with a different signer cannot be updated by this fork; setup reports the conflict
