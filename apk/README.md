@@ -33,7 +33,7 @@ plus 6 packaging checks and 8 diagnostics checks. Signatures, alignment, APK/sou
 and the exact three APKs embedded in Setup were verified.
 The [installer build record](setup-build-info.json) lists each bundled checksum and signer.
 
-Historical runtime check: Setup `0.1.0-bd52f6f` passed on an Android 35 x86_64
+Historical runtime check: Setup `0.1.0-9184a3f` passed on an Android 35 x86_64
 emulator with networking disabled: install-source permission, cancellation,
 resume, skipping an already installed component, and all three component
 installations. The [archived emulator test record](test-history/setup-emulator-9184a3f.json)
