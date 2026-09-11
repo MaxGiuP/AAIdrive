@@ -50,6 +50,15 @@ Connection observations come from recent buffered logs and may describe an older
 connection. Transport is inferred from AAIdrive's known port mapping; absence of
 an observation does not mean the car is disconnected.
 
+For a USB **device unsupported** error, reproduce it with AAIdrive open before
+connecting the phone to the laptop. The collector retains up to 12 recent USB
+profile broadcasts as fixed booleans such as `connected`, `configured`, `mtp`,
+and `accessory`. Connecting to the laptop can add newer broadcasts: these samples
+are phone USB modes, not proof of a BMW connection. An absent key means unknown,
+and `accessory: true` does not identify the accessory as a BMW. The app does not
+log its separate BMW accessory check, so the report marks that result unavailable.
+No USB device names, serial numbers, or arbitrary extras are saved.
+
 During projection, the updated app logs numeric pipeline measurements about every
 five seconds. The collector keeps up to 12 recent samples: capture dimensions,
 configured interval, JPEG quality, byte counts, unchanged frames, and average
@@ -58,7 +67,7 @@ car's actual refresh rate. A static picture intentionally needs few or no new
 sends. Empty samples can mean projection was inactive or an older build is installed.
 
 For the BMW software details, enable **Show Advanced Settings** in AAIdrive, open
-**Car Info**, and copy only `hmi.type`, `hmi.version`, `hmi.display-width`,
+**Car Information**, and copy only `hmi.type`, `hmi.version`, `hmi.display-width`,
 `hmi.display-height`, `navi`, `map`, and `tts` from **Detailed Car Capabilities**.
 The nearby live data can include location; do not share the whole page. These
 fields describe capabilities reported through the live BMW app protocol, not a

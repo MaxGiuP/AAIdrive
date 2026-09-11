@@ -21,13 +21,23 @@ never removes an existing app automatically.
 
 [Full installation and car setup guide](docs/one-apk-setup.md) · [Individual APKs and checksums](apk/README.md)
 
+**Music and BMW navigation first.** Setup detects your installed media apps and
+provides official installation links for missing ones. YouTube Music ReVanced,
+Audible, YouTube and Rumble get their own car shortcuts when installed and unhidden.
+See the [app list, controls and official references](docs/bmw-apps.md).
+Android Auto projection setup is optional.
+
 Android Auto projection is experimental and still needs phone/car setup. It has
 not been tested on the target Pixel/BMW. No Google Maps API key is needed for this
 projection path.
 
+**iDrive only offers phone/audio/apps?** Use the BMW Apps connection. Setup does
+not activate CarPlay or native Android Auto. See [connection troubleshooting](docs/connection.md)
+for a USB “device unsupported” message.
+
 This is [MaxGiuP's fork](https://github.com/MaxGiuP/AAIdrive), with YouTube Music
-ReVanced as the preferred player on a fresh setup and its own ConnectedDrive/Online
-Services shortcut. Music uses the standard multimedia layout by default, with the
+ReVanced as the preferred player on a fresh setup and the highest-priority media
+shortcut in ConnectedDrive/Online Services. Music uses the standard multimedia layout by default, with the
 published playlist available inside AAIdrive. The Spotify-branded native iDrive 5+
 layout is an explicit advanced option. Audible, Rumble, and YouTube ReVanced also
 receive compatibility improvements. See the [media setup and compatibility notes](docs/maxgiup-media.md).
@@ -74,7 +84,7 @@ User Guide
 
 After connecting the phone to the car, the official MyBMW app should show this car icon in the status bar. When this icon appears, this app should connect and add its functionality to the car.
 
-See [this guide](https://bimmergestalt.github.io/AAIdrive/connection.html) for tips on improving the connection reliability of the MyBMW app.
+See [this guide](docs/connection.md) for tips on improving the connection reliability of the MyBMW app.
 
 ![Phone App List](https://bimmergestalt.github.io/AAIdrive/images/screenshot-phoneapps.jpg)
 

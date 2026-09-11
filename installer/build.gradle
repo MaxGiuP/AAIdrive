@@ -10,8 +10,8 @@ android {
         applicationId 'io.github.maxgiup.aaidrive.setup'
         minSdk 23
         targetSdk 35
-        versionCode 3
-        versionName '0.1.0-' + providers.exec {
+        versionCode 4
+        versionName '0.2.0-' + providers.exec {
             commandLine 'git', 'rev-parse', '--short=7', 'HEAD'
         }.standardOutput.asText.get().trim()
     }
@@ -52,6 +52,7 @@ def bundleApps = tasks.register('bundleApps', Exec) {
     inputs.file rootProject.file('scripts/prepare-setup-assets.py')
     inputs.file rootProject.file('scripts/package-apk.py')
     inputs.file rootProject.file('docs/one-apk-setup.md')
+    inputs.file rootProject.file('docs/bmw-apps.md')
     inputs.file rootProject.file('LICENSE')
     inputs.file rootProject.file('screen-mirror/NOTICE.md')
     outputs.dir layout.buildDirectory.dir('generated/bundledAssets')

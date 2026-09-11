@@ -12,6 +12,7 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
 import me.hufman.androidautoidrive.AppSettings
+import me.hufman.androidautoidrive.carapp.music.MusicHomeAppInfo
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -91,6 +92,31 @@ class MusicAppDiscoveryTest {
 		discovery.addSessionApps()
 		assertTrue(discovery.validApps.isEmpty())
 		assertEquals(3, discovery.allApps.size)
+	}
+
+	@Test
+	fun homeShortcutsSurviveSessionTeardownAndRefreshAfterUninstall() {
+		MusicAppCompatibility.SESSION_APP_PACKAGES.forEach { install(it) }
+		val preferredYoutube = MusicAppCompatibility.YOUTUBE_VIDEO_PACKAGES[0]
+		addSession(preferredYoutube)
+		discovery.loadInstalledMusicApps()
+		val before = MusicHomeAppInfo.shortcuts(discovery.allApps)
+		assertEquals(4, before.size)
+		assertEquals(preferredYoutube, before[2].packageName)
+		assertTrue(before[2].musicApp.controllable)
+		sessions.clear()
+		discovery.addSessionApps()
+		assertEquals(before.map { it.packageName }, MusicHomeAppInfo.shortcuts(discovery.allApps).map { it.packageName })
+		assertTrue(discovery.validApps.isEmpty())
+
+		applications.remove(preferredYoutube)
+		applications.remove(MusicAppCompatibility.AUDIBLE_PACKAGE)
+		discovery.loadInstalledMusicApps()
+		val refreshed = MusicHomeAppInfo.shortcuts(discovery.allApps)
+		assertEquals(listOf(MusicAppCompatibility.YOUTUBE_MUSIC_PACKAGES[0],
+			MusicAppCompatibility.YOUTUBE_VIDEO_PACKAGES[1], MusicAppCompatibility.RUMBLE_PACKAGE),
+			refreshed.map { it.packageName })
+		assertTrue(refreshed.none { it.musicApp.connectable || it.musicApp.controllable })
 	}
 
 	@Test

@@ -5,19 +5,23 @@ It tries ReVanced, then ReVanced Extended, then stock or root-patched YouTube Mu
 An already playing app, a saved player, and apps you explicitly hide keep their priority.
 The preference controls AAIdrive; it does not change Android's system defaults.
 
-YouTube Music has its own shortcut in ConnectedDrive/Online Services when AAIdrive
-discovers an installed, unhidden YouTube Music app. Opening the shortcut selects that app
+YouTube Music, Audible, YouTube, and Rumble have their own shortcuts in
+ConnectedDrive/Online Services when AAIdrive discovers installed, unhidden apps.
+YouTube Music has the highest shortcut priority. Opening a shortcut selects that app
 and opens AAIdrive's music screen. Music uses the standard multimedia layout by
 default, and the playlist remains available inside AAIdrive.
-The shortcut uses the installed app's icon and distinguishes ReVanced and ReVanced
-Extended by their package names. It stays visible while the player connects; if
+Each shortcut uses the installed app's icon and distinguishes known ReVanced and
+ReVanced Extended variants by their package names. Only one preferred variant per
+YouTube family appears on the home page. Shortcuts stay visible while the player connects; if
 playback does not start, open the player on the phone first. BMW's generic
 Audioplayer entry may also remain. This changes AAIdrive's registrations, not an
 independent Spotify entry created by another app.
 
 ## Setup
 
-1. Install the [fork APK](../apk/README.md) and your chosen media apps.
+1. Install the [single Setup APK](one-apk-setup.md). Its phone-app list opens
+   installed players and links to official sources for missing apps. See the
+   [app list and references](bmw-apps.md).
 2. Grant AAIdrive notification access so it can discover active media sessions.
 3. Open YouTube Music ReVanced on the phone and start the playlist you want.
 4. Open the YouTube Music shortcut in ConnectedDrive/Online Services, or select
@@ -50,8 +54,9 @@ explains how to check the phone's published queue and the car's reported capabil
 
 ## Changes
 
-- YouTube Music has a ConnectedDrive/Online Services shortcut, alongside AAIdrive's
-  internal music app selector. Standard multimedia is the default layout.
+- YouTube Music, Audible, YouTube, and Rumble have ConnectedDrive/Online Services
+  shortcuts, alongside AAIdrive's internal music app selector. Standard multimedia
+  is the default layout; Spotify is not added as a preferred home shortcut.
 - The optional native iDrive 5+ music selector and instrument-cluster playlist
   display published queue tracks. Back/Next controls remain available when a
   player supplies no queue.

@@ -122,12 +122,17 @@ I/CarProber( 12): carCapabilities hmi.type=BMW location=PRIVATE_HOME
             if args[2:] == ["shell", "getprop", "ro.build.version.sdk"]:
                 return "35\n"
             self.assertEqual(["logcat", "-d", "-t", "1500", "-v", "brief"], args[2:8])
-            self.assertEqual("*:S", args[-1])
-            return "I/Unrelated( 1): PRIVATE\n"
+            self.assertEqual([tag + ":V" for tag in diagnostics.LOG_TAGS] + ["*:S"], args[8:])
+            self.assertIn("CarDebugging:V", args)
+            return ("I/Unrelated( 1): PRIVATE\n"
+                    "I/CarDebugging( 1): Received notification of USB state, connected usb profiles: {connected=true, mtp=true, adb=true}\n"
+                    "I/CarDebugging( 1): UsbAccessory manufacturer=BMW serial=PRIVATE_SERIAL\n")
 
         report = diagnostics.collect("unused-adb", "PRIVATE_SERIAL", fake_adb)
         self.assertEqual(len(diagnostics.PACKAGES) + 3, len(calls))
         self.assertEqual(35, report["android_sdk"])
+        self.assertEqual([{"connected": True, "mtp": True, "adb": True}],
+                         report["log_observations"]["usb_profile_samples"])
         with tempfile.TemporaryDirectory() as directory:
             path = diagnostics.save_report(report, Path(directory))
             self.assertNotIn("PRIVATE", path.read_text())
@@ -146,6 +151,71 @@ I/CarProber( 12): carCapabilities hmi.type=BMW location=PRIVATE_HOME
         self.assertEqual(8, result["projection_samples"][0]["unchanged"])
         self.assertNotIn("PRIVATE", json.dumps(result))
         self.assertEqual([], diagnostics.summarize_logs(sample + " PRIVATE_TOKEN")["projection_samples"])
+
+    def test_usb_broadcasts_preserve_mode_changes_without_inventing_bmw_connection(self):
+        prefix = "I/CarDebugging( 12): " + diagnostics.USB_STATE_PREFIX
+        raw = "\n".join(prefix + profiles for profiles in (
+            "{connected=true, configured=false}",
+            "{connected=true, configured=true, mtp=true, adb=false}",
+            "{connected=true, accessory=true, adb=true}",
+            "{connected=false, accessory=false}",
+            "{}",
+        ))
+        result = diagnostics.summarize_logs(raw)
+        self.assertEqual([
+            {"connected": True, "configured": False},
+            {"connected": True, "configured": True, "mtp": True, "adb": False},
+            {"connected": True, "accessory": True, "adb": True},
+            {"connected": False, "accessory": False},
+            {},
+        ], result["usb_profile_samples"])
+        self.assertEqual(5, result["event_counts"]["usb_profile_broadcast_observed"])
+        self.assertIsNone(result["last_connection_observed"])
+        self.assertEqual("not_logged_by_app", result["bmw_usb_accessory_status"])
+        self.assertIn("not live state", result["observation_scope"])
+        self.assertIn("possibly from a computer", result["usb_observation_scope"])
+        self.assertIn("Missing profiles are unknown", result["usb_observation_scope"])
+
+    def test_usb_profile_parser_accepts_only_known_boolean_keys(self):
+        expected = {key: index % 2 == 0 for index, key in enumerate(diagnostics.USB_PROFILE_FIELDS)}
+        message = diagnostics.USB_STATE_PREFIX + "{" + ", ".join(
+            key + "=" + str(value).lower() for key, value in expected.items()) + "}"
+        self.assertEqual(expected, diagnostics.parse_usb_profiles(message))
+        self.assertIsNone(diagnostics.parse_usb_profiles("unrelated"))
+
+    def test_usb_samples_are_bounded_and_require_the_expected_log_tag(self):
+        prefix = diagnostics.USB_STATE_PREFIX
+        raw = "\n".join(["I/CarDebugging( 12): " + prefix + "{mtp=true}"] * 15
+                        + ["I/CarDebugging( 12): " + prefix + "{mtp=false}",
+                           "I/MainService( 12): " + prefix + "{mtp=true}"])
+        result = diagnostics.summarize_logs(raw)
+        self.assertEqual(12, len(result["usb_profile_samples"]))
+        self.assertEqual({"mtp": False}, result["usb_profile_samples"][-1])
+        self.assertEqual(16, result["event_counts"]["usb_profile_broadcast_observed"])
+
+    def test_usb_rejects_extra_identifiers_malformed_values_and_duplicate_keys(self):
+        prefix = "I/CarDebugging( 12): " + diagnostics.USB_STATE_PREFIX
+        malformed = (
+            "{connected=true, serial=PRIVATE_SERIAL}",
+            "{connected=true, PRIVATE_SECRET=true}",
+            "{connected=PRIVATE_SECRET}",
+            "{connected=true} PRIVATE_SECRET",
+            "{connected=true, mtp=true, token=https://private.example/SECRET}",
+            "{connected=true, manufacturer=BMW, serial=PRIVATE_SERIAL}",
+            "{connected=true, connected=false}",
+            "{connected=1}",
+            "{connected=True}",
+            "{connected=true,mtp=true}",
+            "{connected=true, }",
+        )
+        raw = "\n".join(prefix + profiles for profiles in malformed)
+        raw += "\nI/CarDebugging( 12): UsbAccessory manufacturer=BMW serial=PRIVATE_SERIAL"
+        raw += "\nI/CarDebugging( 12): VIN=WBA123456789ABCDE0 address=PRIVATE_HOME token=SECRET"
+        result = diagnostics.summarize_logs(raw)
+        self.assertEqual([], result["usb_profile_samples"])
+        self.assertNotIn("usb_profile_broadcast_observed", result["event_counts"])
+        for private in ("PRIVATE", "SECRET", "https://", "WBA", "serial", "manufacturer"):
+            self.assertNotIn(private, json.dumps(result))
 
 
 if __name__ == "__main__":

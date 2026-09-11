@@ -97,6 +97,8 @@ object L {
 	val CALENDAR_TIME_ALLDAY by StringResourceDelegate("All Day")
 	val CALENDAR_NAVIGATE by StringResourceDelegate("Navigate")
 
+	val ASSISTANT_APP_NAME by StringResourceDelegate("%1\$s (voice assistant)")
+
 	val MUSIC_APPLIST_TITLE by StringResourceDelegate("Apps")
 	val MUSIC_APPLIST_EMPTY by StringResourceDelegate("<No Apps>")
 	val MUSIC_CUSTOMACTIONS_TITLE by StringResourceDelegate("Actions")

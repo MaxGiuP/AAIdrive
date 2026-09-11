@@ -16,13 +16,31 @@ No additional download is needed to install these three bundled components.
    is reported as a conflict; setup never uninstalls it or erases its settings.
 4. Open AAIdrive through setup, complete its permissions and car connection steps,
    and check that its apps appear on iDrive. Keep the phone's Bluetooth media output
-   connected to the BMW for audio.
-5. Open Open Headunit through setup and complete its first-run configuration. Use
+   connected to the BMW for audio. After updating, reconnect the BMW Apps session
+   so the car receives the new shortcut registrations.
+5. Use Setup's phone-app list to open your installed YouTube Music ReVanced,
+   Audible, YouTube, and Rumble apps, or visit their official installation sources.
+   Start playback once in the apps you want to control, and give AAIdrive notification
+   access. Installed, unhidden supported apps gain their own car shortcuts, with
+   YouTube Music first. Open **Now Playing** inside AAIdrive to choose from the
+   tracks the player publishes.
+6. For native navigation, open Google Maps from Setup, choose a destination, and
+   share it to **BMW/MINI Navigation** while connected. Check the destination on
+   the BMW screen. The car calculates its own route; Google's exact route is not imported.
+
+Music and native BMW navigation are ready after these steps. The
+[app list and official references](bmw-apps.md) describe each integration.
+
+## Optional: Google Maps through Android Auto projection
+
+Expand the optional projection section in Setup to show these controls.
+
+1. Open Open Headunit through setup and complete its first-run configuration. Use
    landscape orientation and hardware H.264 decoding.
-6. Open Android Auto settings through setup. Tap its version information ten times
+2. Open Android Auto settings through setup. Tap its version information ten times
    to enable developer settings; in the menu choose **Start headunit server**.
    Check/start this server for each session when needed.
-7. Open Projection through setup and tap **Start Android Auto on BMW**. Approve
+3. Open Projection through setup and tap **Start Android Auto on BMW**. Approve
    screen sharing, selecting the entire display if offered. Keep Open Headunit
    visible on the unlocked phone. In iDrive open **Android Auto (experimental)**,
    then **View Android Auto**.
@@ -32,10 +50,17 @@ server and screen-sharing consent. Setup guides these steps but cannot silently
 grant them. Do the initial configuration and checks while parked.
 
 Google's Android Auto and Google Maps apps normally come with supported phones.
-They are not repackaged inside this installer. If either is missing, setup links
-to its official Google Play listing; installing those Google apps needs internet.
+They and the media apps are not repackaged inside this installer. Setup links
+to official Google Play listings and the official ReVanced patching project;
+getting those apps needs internet. An existing ReVanced installation is detected
+and can be opened directly; installing Setup does not patch YouTube or YouTube Music.
 AAIdrive also retains its own checks for any BMW connection prerequisites.
 No Google Maps developer API key or billing project is needed for this projection path.
+
+If iDrive only offers **phone/audio/apps** when adding a device, use its **Apps**
+connection. Setup does not require or activate CarPlay. A USB **device unsupported**
+message is a separate [connection troubleshooting issue](connection.md); keep
+Bluetooth Apps connected if that already works.
 
 The new installer is tested with automated checks. Physical installation and
 projection on the target Pixel/BMW remain untested. Screen sharing sends compressed

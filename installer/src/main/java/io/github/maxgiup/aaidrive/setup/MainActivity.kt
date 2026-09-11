@@ -3,9 +3,7 @@ package io.github.maxgiup.aaidrive.setup
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.ClipData
-import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
@@ -36,16 +34,13 @@ import java.util.concurrent.Future
 /** The installer prompts stay in this visible activity; the retained model only verifies files. */
 class MainActivity : AppCompatActivity() {
     companion object {
-        private const val AAIDRIVE = "me.hufman.androidautoidrive"
-        private const val HEADUNIT = "com.andrerinas.headunitrevived"
-        private const val PROJECTION = "io.github.maxgiup.aaidrive.projection"
-        private const val ANDROID_AUTO = "com.google.android.projection.gearhead"
-        private const val MAPS = "com.google.android.apps.maps"
+        private const val PROJECTION_EXPANDED = "projection_expanded"
     }
 
     private lateinit var model: SetupModel
     private lateinit var content: LinearLayout
     private var resumed = false
+    private var projectionExpanded = false
     private val installLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         // Package installers sometimes return RESULT_CANCELED even after installing. Query facts.
         model.installationReturned()
@@ -56,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        projectionExpanded = savedInstanceState?.getBoolean(PROJECTION_EXPANDED) ?: false
         model = ViewModelProvider(this)[SetupModel::class.java]
         model.initialize(savedInstanceState)
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -91,6 +87,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         model.save(outState)
+        outState.putBoolean(PROJECTION_EXPANDED, projectionExpanded)
         super.onSaveInstanceState(outState)
     }
 
@@ -181,23 +178,8 @@ class MainActivity : AppCompatActivity() {
             button(R.string.cancel_setup) { model.cancel() }
         }
 
-        text(getString(R.string.phone_setup), 21f, true)
-        text(getString(R.string.step_aaidrive))
-        button(R.string.open_aaidrive, model.ready(AAIDRIVE)) { openPackage(AAIDRIVE) }
-        text(getString(R.string.step_google))
-        googleApp(ANDROID_AUTO, getString(R.string.android_auto))
-        googleApp(MAPS, getString(R.string.google_maps))
-        button(R.string.android_auto_settings) {
-            val settings = Intent(Intent.ACTION_MAIN).setComponent(ComponentName(ANDROID_AUTO,
-                "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity"))
-            if (!openIntent(settings, false)) openIntent(Intent(Settings.ACTION_SETTINGS))
-        }
-        button(R.string.phone_settings) { openIntent(Intent(Settings.ACTION_SETTINGS)) }
-        text(getString(R.string.step_headunit))
-        button(R.string.open_headunit, model.ready(HEADUNIT)) { openPackage(HEADUNIT) }
-        text(getString(R.string.step_projection))
-        button(R.string.open_projection, model.ready(PROJECTION)) { openPackage(PROJECTION) }
-        text(getString(R.string.limitations))
+        content.addView(PhoneSetupView(this, model::ready, ::openPackage,
+            { openIntent(it, false) }, projectionExpanded, { projectionExpanded = it }))
         button(R.string.help) { showAsset(R.string.help, "SETUP.md") }
         button(R.string.licenses) { showAsset(R.string.licenses, "LICENSES.txt") }
     }
@@ -221,21 +203,6 @@ class MainActivity : AppCompatActivity() {
             isEnabled = enabled
             setOnClickListener { action() }
         }, LinearLayout.LayoutParams(-1, -2))
-    }
-
-    private fun googleApp(packageName: String, label: String) {
-        val app = try { packageManager.getApplicationInfo(packageName, 0) } catch (_: PackageManager.NameNotFoundException) { null }
-        val message = when {
-            app == null -> getString(R.string.google_app_missing, label)
-            !app.enabled -> getString(R.string.google_app_disabled, label)
-            else -> getString(R.string.google_app_installed, label)
-        }
-        button(message) {
-            if (app != null) appSettings(packageName)
-            else if (!openIntent(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")), false)) {
-                openIntent(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")))
-            }
-        }
     }
 
     private fun appSettings(packageName: String) {

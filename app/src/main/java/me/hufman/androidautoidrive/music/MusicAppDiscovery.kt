@@ -151,8 +151,8 @@ class MusicAppDiscovery(val context: Context, val handler: Handler): CoroutineSc
 
 		this.browseApps.sortBy { it.name.lowercase() }
 
-		// Keep known session-only players in the phone's app list even before playback starts.
-		// They become selectable in the car once they expose a controllable MediaSession.
+		// Keep installed session-only players available for phone setup and home shortcuts
+		// before playback starts. The car's Media list still requires a controllable session.
 		val browsePackages = browseApps.map { it.packageName }.toSet()
 		installedSessionApps.clear()
 		installedSessionApps.addAll(MusicAppCompatibility.SESSION_APP_PACKAGES

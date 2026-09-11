@@ -8,7 +8,8 @@ object MusicAppCompatibility {
 		"app.rvx.android.apps.youtube.music",
 		"com.google.android.apps.youtube.music"
 	)
-	val YOUTUBE_VIDEO_PACKAGES = setOf(
+	// Also the home-shortcut preference order when several variants are installed.
+	val YOUTUBE_VIDEO_PACKAGES = listOf(
 		"app.revanced.android.youtube",
 		"app.rvx.android.youtube",
 		"com.google.android.youtube",

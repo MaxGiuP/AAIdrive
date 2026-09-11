@@ -3,7 +3,6 @@ package me.hufman.androidautoidrive.carapp.assistant
 import android.graphics.drawable.Drawable
 import me.hufman.androidautoidrive.carapp.AMAppInfo
 import me.hufman.androidautoidrive.carapp.AMCategory
-import me.hufman.androidautoidrive.music.MusicAppInfo
 
 data class AssistantAppInfo(override val name: String, override val icon: Drawable,
                             override val packageName: String): AMAppInfo {
@@ -17,7 +16,7 @@ data class AssistantAppInfo(override val name: String, override val icon: Drawab
 		if (this === other) return true
 		if (javaClass != other?.javaClass) return false
 
-		other as MusicAppInfo
+		other as AssistantAppInfo
 
 		if (name != other.name) return false
 		if (packageName != other.packageName) return false

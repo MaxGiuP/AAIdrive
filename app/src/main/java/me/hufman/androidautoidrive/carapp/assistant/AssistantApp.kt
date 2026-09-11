@@ -13,7 +13,7 @@ import me.hufman.androidautoidrive.utils.GraphicsHelpers
 class AssistantApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityAccess: SecurityAccess, val carAppAssets: CarAppResources, val controller: AssistantController, val graphicsHelpers: GraphicsHelpers) {
 	val TAG = "AssistantApp"
 	val carConnection = createRHMIApp()
-	val amAppList = AMAppList<AssistantAppInfo>(carConnection, graphicsHelpers, "me.hufman.androidautoidrive.assistant")
+	val amAppList = AMAppList<AssistantCarAppInfo>(carConnection, graphicsHelpers, "me.hufman.androidautoidrive.assistant")
 
 	private fun createRHMIApp(): BMWRemotingServer {
 		val carappListener = CarAppListener()
@@ -28,7 +28,7 @@ class AssistantApp(val iDriveConnectionStatus: IDriveConnectionStatus, val secur
 
 	fun onCreate() {
 		val assistants = controller.getAssistants()
-		amAppList.setApps(assistants.toList())
+		amAppList.setApps(assistants.map(::AssistantCarAppInfo))
 	}
 
 	fun onDestroy() {
@@ -38,7 +38,7 @@ class AssistantApp(val iDriveConnectionStatus: IDriveConnectionStatus, val secur
 		override fun am_onAppEvent(handle: Int?, ident: String?, appId: String?, event: BMWRemoting.AMEvent?) {
 			appId ?: return
 			val assistant = amAppList.getAppInfo(appId) ?: return
-			controller.triggerAssistant(assistant)
+			controller.triggerAssistant(assistant.assistant)
 			Thread.sleep(2000)
 			amAppList.redrawApp(assistant)
 		}

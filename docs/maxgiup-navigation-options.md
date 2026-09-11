@@ -46,20 +46,17 @@ available independently.
 No working, reusable transmitter implementation for this fork has been established.
 The requested bridge is not implemented in the downloadable APK.
 
-[OKCar OS](https://github.com/okcar-os/android) demonstrates that Android-to-CarPlay
-transmission is possible on specially modified devices. Its published architecture
-uses a customized Android operating system and kernel; the maintainer states that
-most CarPlay protocol implementation lives in the `autoconn` app and the complete
-source is not included in the public kernel release. Compatibility with a current
-stock phone or a wireless-only BMW CarPlay endpoint has not been established.
-
-For a wired implementation, normal Android apps cannot configure arbitrary USB
-device identities/functions. Those controls are restricted to system APIs and
-privileged permissions in [AOSP's USB manager](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/hardware/usb/UsbManager.java).
-The public [Android USB accessory API](https://developer.android.com/develop/connectivity/usb)
-uses Android's accessory protocol. This wired restriction alone does not prove a
-wireless transmitter impossible, but no usable wireless transmitter was found.
+Apple's [wireless CarPlay architecture](https://developer.apple.com/videos/play/wwdc2017/717/)
+uses Bluetooth discovery and iAP2 setup, then Wi-Fi for audio, video, and control.
+An Android sender would need to implement the phone side of those protocols;
+changing the phone's Bluetooth name or USB mode does not implement them.
 CarPlay receiver/head-unit projects implement the opposite side of the connection.
+No compatible sender for a stock phone and this BMW has been established here.
+
+If the car's pairing menu only offers phone/audio/apps, there is no CarPlay
+connection offered in its current setup. Use the existing BMW Apps path described
+above. The [compatibility guide](car-compatibility.md) explains why this does not
+by itself identify the hardware or establish whether a retrofit is possible.
 
 Vehicle telephone/media version numbers are not a CarPlay entitlement or a complete
 head-unit identification. The navigation/head-unit version and whether the car

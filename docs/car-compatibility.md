@@ -20,3 +20,27 @@ version. A working Connected Apps connection remains necessary. The
 [projection guide](android-auto-projection.md) describes the frame limits and
 diagnostics available for checking an actual connection; no vehicle-specific
 performance result is claimed here.
+
+## When the pairing menu only offers phone, audio, and apps
+
+Treat CarPlay as unavailable in the current setup if **Manage mobile devices →
+Add new device** does not offer **Apple CarPlay**. This does not distinguish
+missing equipment from a feature that is not activated; it is not enough evidence
+to prescribe coding, a firmware update, or replacement hardware.
+
+The same late-2017 BMW specification lists CarPlay as optional equipment `6CP`,
+requiring the Professional navigation package `ZNP`, and describes a wireless
+connection. An Android phone's USB “device unsupported” message neither identifies
+the head unit nor establishes that a CarPlay receiver is available.
+
+For a car where AAIdrive already works over Bluetooth, use that BMW Apps connection
+for the music interface and [native BMW destination handoff](maxgiup-navigation-options.md).
+The [experimental projection companion](android-auto-projection.md) can use the
+same connection, with its existing bandwidth limits. Installing Setup does not
+activate CarPlay or native Android Auto in the head unit.
+
+To investigate USB or identify the reported software, follow the
+[connection guide](connection.md) and [diagnostics guide](car-diagnostics.md).
+Read `hmi.type` and `hmi.version` while AAIdrive is connected before considering
+equipment-specific changes. A laptop can collect information from the Android
+phone; plugging it into the car's media USB port does not expose BMW firmware.

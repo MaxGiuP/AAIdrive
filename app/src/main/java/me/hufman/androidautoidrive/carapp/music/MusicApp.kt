@@ -232,7 +232,7 @@ class MusicApp(val iDriveConnectionStatus: IDriveConnectionStatus, val securityA
 		amAppList.setApps(amApps)
 		// ConnectedDrive and Media have separate registrations. The former can carry
 		// the phone app's own label/icon without modifying BMW's signed resources.
-		homeAppList.setApps(listOfNotNull(MusicHomeAppInfo.preferred(musicAppDiscovery.allApps)))
+		homeAppList.setApps(MusicHomeAppInfo.shortcuts(musicAppDiscovery.allApps))
 	}
 
 	inner class CarAppListener(val cdsEventHandler: CDSEventHandler): BaseBMWRemotingClient() {

@@ -73,7 +73,9 @@ def main():
                                 versionCode=identity[1], versionName=identity[2], sha256=digest,
                                 signerSha256=signer, minSdk=int(minimum.group(1))))
         (staged / 'bundled-apps.json').write_text(json.dumps(catalog, indent=2) + '\n')
-        shutil.copyfile(ROOT / 'docs/one-apk-setup.md', staged / 'SETUP.md')
+        (staged / 'SETUP.md').write_text(
+            (ROOT / 'docs/one-apk-setup.md').read_text() + '\n\n' +
+            (ROOT / 'docs/bmw-apps.md').read_text())
         notices = ['Source and licenses for the bundled apps\n',
                    'AAIdrive and Projection source: https://github.com/MaxGiuP/AAIdrive\n',
                    (ROOT / 'LICENSE').read_text(),

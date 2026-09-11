@@ -52,9 +52,15 @@ STATE_NAMES = (
     "SKIPPING_TO_NEXT", "SKIPPING_TO_QUEUE_ITEM",
 )
 LOG_TAGS = (
-    "CarProber", "MainService", "MusicSessions", "MusicAppDiscovery",
+    "CarProber", "CarDebugging", "MainService", "MusicSessions", "MusicAppDiscovery",
     "MusicBrowser", "MusicMetadata", "GenericMusicController", "ScreenMirroring",
 )
+# UsbStatus.KNOWN_PROFILES. Never preserve arbitrary USB extras or device strings.
+USB_PROFILE_FIELDS = (
+    "connected", "host_connected", "configured", "unlocked", "none", "adb",
+    "rndis", "mtp", "ptp", "audio_source", "midi", "accessory", "ncm",
+)
+USB_STATE_PREFIX = "Received notification of USB state, connected usb profiles: "
 PROJECTION_FIELDS = (
     "window_ms", "width", "height", "interval_ms", "quality", "frames", "sent",
     "unchanged", "jpeg_duplicates", "bytes", "sends_per_s", "avg_bytes",
@@ -166,6 +172,22 @@ def parse_media_sessions(output):
     return sessions
 
 
+def parse_usb_profiles(message):
+    """Accept only the exact boolean map logged by UsbStatus; missing stays unknown."""
+    match = re.fullmatch(re.escape(USB_STATE_PREFIX) + r"\{(.*)\}", message)
+    if not match:
+        return None
+    profiles = {}
+    if not match[1]:
+        return profiles
+    for entry in match[1].split(", "):
+        field = re.fullmatch(r"([a-z_]+)=(true|false)", entry)
+        if not field or field[1] not in USB_PROFILE_FIELDS or field[1] in profiles:
+            return None
+        profiles[field[1]] = field[2] == "true"
+    return profiles
+
+
 def summarize_logs(output):
     """Turn known messages into counters/numeric fields; never retain a log line."""
     counts = Counter()
@@ -173,6 +195,7 @@ def summarize_logs(output):
     last_transport = None
     last_queue_id = None
     projection_samples = []
+    usb_profile_samples = []
     for line in output.splitlines():
         match = re.fullmatch(r"[VDIWEF]/([^()]+)\(\s*\d+\):\s?(.*)", line)
         if not match:
@@ -190,6 +213,12 @@ def summarize_logs(output):
                     counts["car_connection_detected"] += 1
             if message == "Previously-connected car has disconnected":
                 counts["car_disconnection"] += 1
+        elif tag == "CarDebugging":
+            profiles = parse_usb_profiles(message)
+            if profiles is not None:
+                usb_profile_samples.append(profiles)
+                usb_profile_samples = usb_profile_samples[-12:]
+                counts["usb_profile_broadcast_observed"] += 1
         elif tag == "MainService":
             if message == "Starting to discover car capabilities":
                 counts["capability_discovery_started"] += 1
@@ -235,6 +264,9 @@ def summarize_logs(output):
             "last_connection_observed": last_transport,
             "last_active_queue_id_observed_unattributed": last_queue_id,
             "projection_samples": projection_samples,
+            "usb_profile_samples": usb_profile_samples,
+            "bmw_usb_accessory_status": "not_logged_by_app",
+            "usb_observation_scope": "Buffered phone USB mode broadcasts, possibly from a computer; accessory=true does not confirm a BMW accessory or BMW Apps connection. Missing profiles are unknown.",
             "observation_scope": "Recent buffered logs, possibly from earlier connections; not live state."}
 
 

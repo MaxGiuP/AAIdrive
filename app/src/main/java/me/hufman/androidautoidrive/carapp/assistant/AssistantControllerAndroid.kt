@@ -52,7 +52,10 @@ open class AssistantControllerAndroid(val context: Context, val phoneAppResource
 
 	override fun getAssistants(): Set<AssistantAppInfo> {
 		val intent = getVoiceIntent()
+		// A package may expose several voice-command activities, but its car shortcut
+		// launches the package rather than a particular activity. Load each app only once.
 		val resolved = context.packageManager.queryIntentActivitiesCompat(intent, 0)
+			.distinctBy { it.activityInfo.packageName }
 		resolved.forEach {
 			Log.i(TAG, "Found voice assistant: ${it.activityInfo.packageName}")
 		}
