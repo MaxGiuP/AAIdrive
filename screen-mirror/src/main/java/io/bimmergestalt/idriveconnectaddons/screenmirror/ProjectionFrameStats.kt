@@ -31,7 +31,7 @@ internal data class ProjectionFrameStatsSummary(
         bytes, sendsPerSecond, averageSentBytes, averageCaptureCopyMs, averageEncodeMs, averageSendMs)
 }
 
-/** Report only acquired frames; emit at most once per five seconds on the capture handler. */
+/** Capture and completed delivery are recorded separately on the capture handler. */
 internal class ProjectionFrameStats {
     private var windowStartedMs: Long? = null
     private var frames = 0L
@@ -58,13 +58,14 @@ internal class ProjectionFrameStats {
         sendMs: Long,
         sentBytes: Int = 0,
         unchanged: Boolean = false,
-        jpegDuplicate: Boolean = false
+        jpegDuplicate: Boolean = false,
+        acquired: Boolean = true
     ): ProjectionFrameStatsSummary? {
         require(width > 0 && height > 0 && intervalMs >= 0 && quality in 0..100)
         require(captureCopyMs >= 0 && encodeMs >= 0 && sendMs >= 0 && sentBytes >= 0)
         val started = windowStartedMs
         if (started == null || nowMs < started) reset(nowMs)
-        frames++
+        if (acquired) frames++
         if (sentBytes > 0) sent++
         if (unchanged) this.unchanged++
         if (jpegDuplicate) jpegDuplicates++
@@ -78,6 +79,11 @@ internal class ProjectionFrameStats {
             frames, sent, this.unchanged, jpegDuplicates, bytes,
             this.captureCopyMs, this.encodeMs, this.sendMs).also { reset(nowMs) }
     }
+
+    fun reportDelivery(nowMs: Long, width: Int, height: Int, intervalMs: Int, quality: Int,
+                       sendMs: Long, sentBytes: Int, jpegDuplicate: Boolean = false) =
+        reportFrame(nowMs, width, height, intervalMs, quality, 0, 0, sendMs, sentBytes,
+            jpegDuplicate = jpegDuplicate, acquired = false)
 
     /** Starting/resuming a capture should not include the previous session's idle time. */
     fun reset(nowMs: Long? = null) {

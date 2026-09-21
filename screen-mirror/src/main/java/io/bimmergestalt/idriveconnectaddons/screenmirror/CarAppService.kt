@@ -3,7 +3,9 @@ package io.bimmergestalt.idriveconnectaddons.screenmirror
 import android.app.Service
 import android.app.UiModeManager
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
@@ -81,8 +83,11 @@ class CarAppService: Service() {
             var ownedApp: CarApp? = null
             var ownedProvider: ScreenMirrorProvider? = null
             var ownedController: OpenHeadunitController? = null
+            val settings = ProjectionSettings(applicationContext)
+            var settingsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
             lateinit var worker: CarThread
             worker = CarThread("ScreenMirroring", onExit = {
+                settingsListener?.let { settings.preferences.unregisterOnSharedPreferenceChangeListener(it) }
                 try { ownedApp?.onDestroy() } finally {
                     try { ownedProvider?.stop() } finally {
                         try { ownedController?.close() } finally {
@@ -93,10 +98,14 @@ class CarAppService: Service() {
             }) {
                 Log.i(TAG, "CarThread is ready, starting CarApp")
                 val carCapabilities = CarCapabilities(applicationContext)
-                val screenMirrorProvider = ScreenMirrorProvider(worker.handler!!).also { ownedProvider = it }
-                val baselineFrameTime = if (iDriveConnectionStatus.port == 4007) 250 else 100
-                screenMirrorProvider.minFrameTime = baselineFrameTime
-                screenMirrorProvider.bluetoothConnection = iDriveConnectionStatus.port == 4007
+                val captureThread = HandlerThread("ProjectionCapture").apply { start() }
+                val screenMirrorProvider = ScreenMirrorProvider(worker.handler!!,
+                    Handler(captureThread.looper), { captureThread.quitSafely() }).also { ownedProvider = it }
+                val bluetooth = iDriveConnectionStatus.port == 4007
+                settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                    if (key == ProjectionSettings.PROFILE) screenMirrorProvider.configure(settings.profile, bluetooth)
+                }.also { settings.preferences.registerOnSharedPreferenceChangeListener(it) }
+                screenMirrorProvider.configure(settings.profile, bluetooth)
                 val controller = OpenHeadunitController(applicationContext).also { ownedController = it }
                 ownedApp = CarApp(
                     iDriveConnectionStatus,
@@ -107,8 +116,7 @@ class CarAppService: Service() {
                     applicationContext.getSystemService(UiModeManager::class.java),
                     screenMirrorProvider,
                     applicationContext,
-                    controller,
-                    baselineFrameTime
+                    controller
                 ) {
                     // start up the notification when we enter the app
                     val foreground = NotificationService.shouldBeForeground()

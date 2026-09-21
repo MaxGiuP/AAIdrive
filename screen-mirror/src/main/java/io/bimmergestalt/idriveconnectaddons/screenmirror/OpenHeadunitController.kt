@@ -5,11 +5,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.KeyEvent
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.util.ArrayDeque
 
@@ -24,6 +24,7 @@ class OpenHeadunitController(context: Context, private val handler: Handler = Ha
     }
 
     private val context = context.applicationContext
+    private val settings = ProjectionSettings(context)
     private val session = ProjectionControlSession()
     private var closed = false
     private var queryInFlight = false
@@ -51,12 +52,8 @@ class OpenHeadunitController(context: Context, private val handler: Handler = Ha
     init {
         ProjectionSession.addListener(handler, captureListener)
         val filter = IntentFilter(STATE_ACTION)
-        if (Build.VERSION.SDK_INT >= 33) {
-            this.context.registerReceiver(stateReceiver, filter, null, handler, Context.RECEIVER_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            this.context.registerReceiver(stateReceiver, filter, null, handler)
-        }
+        ContextCompat.registerReceiver(this.context, stateReceiver, filter, null, handler,
+            ContextCompat.RECEIVER_EXPORTED)
     }
 
     /** Enable only while the car's Android Auto view or its control menu is open. */
@@ -79,6 +76,8 @@ class OpenHeadunitController(context: Context, private val handler: Handler = Ha
     /** Returns false for unsupported keys, an inactive session, or a full queue. */
     @Synchronized
     fun press(keyCode: Int): Boolean = !closed && captureMatches() && queue.press(keyCode)
+
+    fun rotate(previous: Boolean): Boolean = press(settings.knobMode.keyCode(previous, settings.reverseKnob))
 
     @Synchronized
     fun close() {
@@ -183,14 +182,14 @@ internal class PacedNavigationKeys(
     companion object {
         const val INTERVAL_MS = 310L
         const val CAPACITY = 4
-        private val ALLOWED = setOf(19, 20, 21, 22, 23, 4) // DPAD directions/center and Back
+        private val ALLOWED = setOf(1, 2, 19, 20, 21, 22, 23, 4) // Native rotary, DPAD, select, Back
     }
 
     private val pending = ArrayDeque<Int>()
     private var active = false
     private var generation = 0L
     private var task: Runnable? = null
-    private var nextSendAt = 0L
+    private val nextSendAt = mutableMapOf<Int, Long>()
 
     @Synchronized
     fun setActive(value: Boolean) {
@@ -214,7 +213,7 @@ internal class PacedNavigationKeys(
     @Synchronized
     private fun drain() {
         if (!active || pending.isEmpty() || task != null) return
-        val delay = (nextSendAt - now()).coerceAtLeast(0)
+        val delay = ((nextSendAt[pending.first] ?: 0L) - now()).coerceAtLeast(0)
         if (delay > 0) {
             val expectedGeneration = generation
             val scheduled = Runnable {
@@ -228,8 +227,9 @@ internal class PacedNavigationKeys(
             task = scheduled
             schedule(scheduled, delay)
         } else {
-            nextSendAt = now() + INTERVAL_MS
-            send(pending.removeFirst())
+            val keyCode = pending.removeFirst()
+            nextSendAt[keyCode] = now() + INTERVAL_MS
+            send(keyCode)
             drain()
         }
     }
