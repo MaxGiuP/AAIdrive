@@ -30,4 +30,15 @@
     <string-array name="car_commands">
         <item>View Android Auto</item><item>Left</item><item>Right</item><item>Up</item><item>Down</item><item>Select</item><item>Android Auto Back</item>
     </string-array>
+    <string name="lbl_projection_profile">Projection speed</string>
+    <string-array name="projection_profiles">
+        <item>Smooth — 30 FPS target</item><item>Balanced — 15 FPS target</item><item>Sharper — 10 FPS target</item>
+    </string-array>
+    <string name="lbl_projection_speed">Smooth favours motion over image detail. Actual speed depends on the BMW connection; compression adjusts automatically.</string>
+    <string name="lbl_knob_mode">iDrive knob</string>
+    <string-array name="knob_modes">
+        <item>Android Auto rotary controller</item><item>Up/down keys</item>
+    </string-array>
+    <string name="lbl_reverse_knob">Reverse knob direction</string>
+    <string name="lbl_knob_help">Enable Rotary Controller in Open Headunit settings before starting Android Auto. Turn to move focus and press to select. Use the car control menu for Android Auto Back and directional buttons.</string>
 </resources>

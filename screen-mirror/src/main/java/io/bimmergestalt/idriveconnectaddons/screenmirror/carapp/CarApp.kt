@@ -27,7 +27,7 @@ class CarApp(val iDriveConnectionStatus: IDriveConnectionStatus, securityAccess:
              val carAppResources: CarAppResources, val androidResources: AndroidResources, val carCapabilities: CarCapabilities,
              val uiModeManager: UiModeManager, val screenMirrorProvider: ScreenMirrorProvider,
              val context: Context, val controller: OpenHeadunitController,
-             val baselineFrameTime: Int, val onEntry: () -> Unit) {
+             val onEntry: () -> Unit) {
     private val carConnection: BMWRemotingServer
     private val rhmiDimensions: RHMIDimensions
     private var amHandle = -1
@@ -114,7 +114,7 @@ class CarApp(val iDriveConnectionStatus: IDriveConnectionStatus, securityAccess:
     }
 
     private fun recreateRhmiApp() {
-        // Called on the capture handler, so no frame can target the disposed application.
+        // Called on the car handler; invalidate queued frames before disposing their application.
         screenMirrorProvider.callback = null
         screenMirrorProvider.onStateChanged = null
         screenMirrorProvider.pause()
@@ -136,7 +136,7 @@ class CarApp(val iDriveConnectionStatus: IDriveConnectionStatus, securityAccess:
     private fun createViews() {
         stateImage = ImageState(carApp.states.values.first { ImageState.fits(it) }, screenMirrorProvider, rhmiDimensions,
             onFocusChanged = { if (it) controller.resume() else controller.pause() },
-            onScroll = { controller.press(if (it) KeyEvent.KEYCODE_DPAD_UP else KeyEvent.KEYCODE_DPAD_DOWN) },
+            onScroll = { controller.rotate(it) },
             onClick = { controller.press(KeyEvent.KEYCODE_DPAD_CENTER) })
         val menu = carApp.states.values.first {
             it is RHMIState.PlainState && it.id != stateImage.state.id &&
@@ -228,11 +228,7 @@ class CarApp(val iDriveConnectionStatus: IDriveConnectionStatus, securityAccess:
                 val speed = data.optDouble("speedActual", 0.0)
                 val moving = speed > 0
                 val carMode = uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_CAR
-                if (moving && !carMode) {
-                    screenMirrorProvider.minFrameTime = maxOf(baselineFrameTime, 1000)
-                } else {
-                    screenMirrorProvider.minFrameTime = baselineFrameTime
-                }
+                screenMirrorProvider.setMotionLimited(moving && !carMode)
             }
         }
     }

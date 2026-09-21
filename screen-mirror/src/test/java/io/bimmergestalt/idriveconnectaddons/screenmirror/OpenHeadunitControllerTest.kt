@@ -38,14 +38,14 @@ class OpenHeadunitControllerTest {
         assertEquals(1, clock.sent.size)
         clock.advance(931)
         assertEquals(listOf(20, 20, 20, 20, 23), clock.sent.map { it.second })
-        assertTrue(clock.sent.zipWithNext().all { (a, b) -> b.first - a.first >= 310 })
+        assertEquals(listOf(1000L, 1310L, 1620L, 1930L, 1930L), clock.sent.map { it.first })
     }
 
     @Test fun pauseDropsPendingInputEvenIfCancelledCallbackStillRuns() {
         val clock = Clock()
         clock.keys.setActive(true)
         clock.keys.press(20)
-        clock.keys.press(23)
+        clock.keys.press(20)
         val stale = clock.scheduled.single().second
         clock.keys.setActive(false)
         assertFalse(clock.keys.press(4))
@@ -79,11 +79,34 @@ class OpenHeadunitControllerTest {
         for (invalid in listOf(-1, 3, 24, 66, 85, Int.MAX_VALUE)) {
             assertFalse(clock.keys.press(invalid))
         }
-        for (code in listOf(19, 20, 21, 22, 23, 4)) {
+        for (code in listOf(1, 2, 19, 20, 21, 22, 23, 4)) {
             assertTrue(clock.keys.press(code))
             clock.advance(310)
         }
-        assertEquals(listOf(19, 20, 21, 22, 23, 4), clock.sent.map { it.second })
+        assertEquals(listOf(1, 2, 19, 20, 21, 22, 23, 4), clock.sent.map { it.second })
+    }
+
+    @Test fun rotaryThenSelectAndBackDoNotHaveAnArtificialDelay() {
+        val clock = Clock()
+        clock.keys.setActive(true)
+        for (code in listOf(2, 23, 4)) assertTrue(clock.keys.press(code))
+        assertEquals(listOf(1000L to 2, 1000L to 23, 1000L to 4), clock.sent)
+        assertTrue(clock.scheduled.isEmpty())
+        clock.keys.press(2)
+        clock.advance(309)
+        assertEquals(3, clock.sent.size)
+        clock.advance(1)
+        assertEquals(1310L to 2, clock.sent.last())
+    }
+
+    @Test fun knobDirectionAndFallbackMapToReceiverSupportedEvents() {
+        assertEquals(1, KnobMode.ROTARY.keyCode(true, false))
+        assertEquals(2, KnobMode.ROTARY.keyCode(false, false))
+        assertEquals(2, KnobMode.ROTARY.keyCode(true, true))
+        assertEquals(1, KnobMode.ROTARY.keyCode(false, true))
+        assertEquals(19, KnobMode.DIRECTIONAL.keyCode(true, false))
+        assertEquals(20, KnobMode.DIRECTIONAL.keyCode(false, false))
+        assertEquals(20, KnobMode.DIRECTIONAL.keyCode(true, true))
     }
 
     @Test fun lateQueryCannotEnablePausedOrNewSession() {

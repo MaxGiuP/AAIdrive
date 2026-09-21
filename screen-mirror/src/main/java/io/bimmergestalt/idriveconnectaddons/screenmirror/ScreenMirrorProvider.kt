@@ -15,11 +15,16 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicLong
 
 enum class MirroringState { NOT_ALLOWED, WAITING, ACTIVE }
 
-/** Capture, conversion, and synchronous car sends share one handler and never queue encoded frames. */
-class ScreenMirrorProvider(val handler: Handler) {
+/** Capture/encoding has its own worker; car RPCs and view updates stay on the car handler. */
+class ScreenMirrorProvider(
+    val handler: Handler,
+    private val captureHandler: Handler = handler,
+    private val onStopped: () -> Unit = {}
+) {
     companion object {
         val state = MutableLiveData(MirroringState.NOT_ALLOWED)
     }
@@ -28,22 +33,66 @@ class ScreenMirrorProvider(val handler: Handler) {
     private val schedule = FrameSchedule()
     private val pixels = RgbaFrameBuffer()
     private val bitmaps = ReusableCaptureBitmaps()
-    private val bluetoothQuality = BluetoothJpegQuality()
+    private var profile = ProjectionProfile.SMOOTH
+    private var bluetooth = false
+    private var motionLimited = false
+    private var compression = AdaptiveJpegQuality(profile.intervalMs, profile.compression(bluetooth))
     private val frameStats = ProjectionFrameStats()
     private val jpg = ByteArrayOutputStream()
     private var imageReader: ImageReader? = null
     private var display: VirtualDisplay? = null
     private var projection: MediaProjection? = null
     private var focused = false
-    private var stopped = false
-    private var currentState: MirroringState? = null
+    @Volatile private var stopped = false
+    @Volatile private var currentState: MirroringState? = null
+    @Volatile private var deliveryActive = false
+    private val generation = AtomicLong()
+    // Accessed only on the car handler.
     private var lastSentFrame: ByteArray? = null
+    private var lastSentGeneration = -1L
+    private data class EncodedFrame(val bytes: ByteArray, val quality: Int, val generation: Long,
+                                    val permission: MediaProjection, val consumer: (ByteArray) -> Unit)
+    private val sender = LatestFrameSender<EncodedFrame>({ handler.post(it) }, ::sendFrame)
 
-    @Volatile var minFrameTime = 100
-    @Volatile var jpgQuality = 60
-    @Volatile var bluetoothConnection = false
-    var callback: ((ByteArray) -> Unit)? = null
-    var onStateChanged: ((MirroringState) -> Unit)? = null
+    @Volatile var minFrameTime = profile.intervalMs
+        private set
+    @Volatile var callback: ((ByteArray) -> Unit)? = null
+        set(value) { field = value; invalidateFrames() }
+    @Volatile var onStateChanged: ((MirroringState) -> Unit)? = null
+
+    private fun invalidateFrames() {
+        generation.incrementAndGet()
+        sender.invalidate()
+    }
+
+    fun configure(profile: ProjectionProfile, bluetooth: Boolean) = onHandler {
+        if (stopped || (this.profile == profile && this.bluetooth == bluetooth)) return@onHandler
+        this.profile = profile
+        this.bluetooth = bluetooth
+        invalidateFrames()
+        bitmaps.resetComparison()
+        frameStats.reset(SystemClock.uptimeMillis())
+        resetCompression()
+        updateInterval()
+    }
+
+    fun setMotionLimited(limited: Boolean) = onHandler {
+        if (motionLimited != limited && !stopped) {
+            motionLimited = limited
+            updateInterval()
+        }
+    }
+
+    private fun resetCompression() {
+        compression = AdaptiveJpegQuality(profile.intervalMs, profile.compression(bluetooth))
+    }
+
+    private fun updateInterval() {
+        minFrameTime = if (motionLimited) maxOf(profile.intervalMs, 1000) else profile.intervalMs
+        captureHandler.removeCallbacks(poll)
+        schedule.reset()
+        schedulePoll()
+    }
 
     private val projectionListener: (MediaProjection?) -> Unit = { next ->
         if (!stopped && projection !== next) {
@@ -54,12 +103,8 @@ class ScreenMirrorProvider(val handler: Handler) {
         }
     }
 
-    init {
-        ProjectionSession.addListener(handler, projectionListener)
-    }
-
     private fun onHandler(action: () -> Unit) {
-        if (Looper.myLooper() == handler.looper) action() else handler.post(action)
+        if (Looper.myLooper() == captureHandler.looper) action() else captureHandler.post(action)
     }
 
     /** Set before focusing the car view; an existing capture keeps its negotiated size. */
@@ -68,12 +113,17 @@ class ScreenMirrorProvider(val handler: Handler) {
         outputSize.set(width, height)
     }
 
-    fun start() = onHandler {
+    fun start() {
+        invalidateFrames()
+        deliveryActive = true
+        onHandler { startCapture() }
+    }
+
+    private fun startCapture() {
         if (!stopped) {
             focused = true
-            lastSentFrame = null
             bitmaps.resetComparison()
-            bluetoothQuality.reset()
+            resetCompression()
             frameStats.reset(SystemClock.uptimeMillis())
             val available = ProjectionSession.currentProjection
             if (projection !== available) projectionListener(available)
@@ -87,21 +137,30 @@ class ScreenMirrorProvider(val handler: Handler) {
         }
     }
 
-    fun pause() = onHandler { pauseCapture() }
+    fun pause() {
+        deliveryActive = false
+        invalidateFrames()
+        onHandler { pauseCapture() }
+    }
 
     private fun pauseCapture() {
         focused = false
-        lastSentFrame = null
         bitmaps.resetComparison()
         frameStats.reset()
-        handler.removeCallbacks(poll)
+        captureHandler.removeCallbacks(poll)
         schedule.reset()
         display?.surface = null
         updateState(if (projection == null) MirroringState.NOT_ALLOWED else MirroringState.WAITING)
     }
 
     /** A released virtual display consumes its permission; another provider needs a fresh session. */
-    fun stop() = onHandler {
+    fun stop() {
+        deliveryActive = false
+        invalidateFrames()
+        onHandler { stopCapture() }
+    }
+
+    private fun stopCapture() {
         if (!stopped) {
             stopped = true
             focused = false
@@ -113,7 +172,7 @@ class ScreenMirrorProvider(val handler: Handler) {
                 callback = null
                 onStateChanged = null
                 projection = null
-                permission?.let { ProjectionSession.stop(it) }
+                try { permission?.let { ProjectionSession.stop(it) } } finally { onStopped() }
             }
         }
     }
@@ -122,14 +181,16 @@ class ScreenMirrorProvider(val handler: Handler) {
         if (currentState != next) {
             currentState = next
             state.postValue(next)
-            onStateChanged?.invoke(next)
+            handler.post {
+                if (!stopped && currentState == next) onStateChanged?.invoke(next)
+            }
         }
     }
 
     private fun releaseCapture() {
-        handler.removeCallbacks(poll)
+        invalidateFrames()
+        captureHandler.removeCallbacks(poll)
         schedule.reset()
-        lastSentFrame = null
         imageReader?.setOnImageAvailableListener(null, null)
         try {
             display?.release()
@@ -138,7 +199,7 @@ class ScreenMirrorProvider(val handler: Handler) {
             imageReader?.close()
             imageReader = null
             bitmaps.clear()
-            bluetoothQuality.reset()
+            resetCompression()
             frameStats.reset()
             pixels.clear()
             jpg.reset()
@@ -153,8 +214,8 @@ class ScreenMirrorProvider(val handler: Handler) {
     private fun schedulePoll(delay: Long = 0) {
         if (!focused || stopped || callback == null || imageReader == null) return
         val deadline = schedule.request(SystemClock.uptimeMillis(), minFrameTime, delay) ?: return
-        handler.removeCallbacks(poll)
-        handler.postAtTime(poll, deadline)
+        captureHandler.removeCallbacks(poll)
+        captureHandler.postAtTime(poll, deadline)
     }
 
     @SuppressLint("WrongConstant")
@@ -171,7 +232,7 @@ class ScreenMirrorProvider(val handler: Handler) {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
             val created = ProjectionSession.claimVirtualDisplay(permission) {
                 permission.createVirtualDisplay("idrive-screen-mirror", reader.width, reader.height,
-                    200, flags, reader.surface, null, handler)
+                    200, flags, reader.surface, null, captureHandler)
             }
             if (created == null) {
                 reader.close()
@@ -182,7 +243,7 @@ class ScreenMirrorProvider(val handler: Handler) {
             imageReader = reader
             display = created
             frameStats.reset(SystemClock.uptimeMillis())
-            reader.setOnImageAvailableListener(imageListener, handler)
+            reader.setOnImageAvailableListener(imageListener, captureHandler)
             updateState(MirroringState.ACTIVE)
             schedulePoll()
         } catch (e: Exception) {
@@ -209,6 +270,7 @@ class ScreenMirrorProvider(val handler: Handler) {
             return
         }
         try {
+            val frameGeneration = generation.get()
             val captureStarted = SystemClock.uptimeMillis()
             val captured = imageReader?.acquireLatestImage()
             if (captured == null) {
@@ -219,7 +281,7 @@ class ScreenMirrorProvider(val handler: Handler) {
             val frame = try { copyImage(captured) } finally { captured.close() }
             val unchanged = bitmaps.isUnchanged(frame)
             val captureCopyMs = SystemClock.uptimeMillis() - captureStarted
-            val quality = if (bluetoothConnection) bluetoothQuality.quality else jpgQuality.coerceIn(0, 100)
+            val quality = compression.quality
             // Compare the captured pixels before spending CPU on JPEG compression.
             // Separate reusable bitmaps keep the previous pixels intact during capture.
             if (unchanged) {
@@ -231,33 +293,56 @@ class ScreenMirrorProvider(val handler: Handler) {
             val encodeStarted = SystemClock.uptimeMillis()
             jpg.reset()
             check(frame.compress(Bitmap.CompressFormat.JPEG, quality, jpg))
-            if (projection === ProjectionSession.currentProjection) {
+            val permission = projection
+            val consumer = callback
+            if (permission != null && permission === ProjectionSession.currentProjection &&
+                frameGeneration == generation.get() && deliveryActive && consumer != null) {
                 val bytes = jpg.toByteArray()
                 val encodeMs = SystemClock.uptimeMillis() - encodeStarted
-                val consumer = callback
-                if (consumer != null) {
-                    val duplicate = lastSentFrame?.contentEquals(bytes) == true
-                    var sendMs = 0L
-                    if (!duplicate) {
-                        val sendStarted = SystemClock.uptimeMillis()
-                        consumer(bytes)
-                        sendMs = SystemClock.uptimeMillis() - sendStarted
-                        lastSentFrame = bytes
-                        if (bluetoothConnection) bluetoothQuality.onFrameSent(sendMs)
-                    }
-                    bitmaps.rememberEncoded(frame)
-                    recordFrame(quality, captureCopyMs, encodeMs, sendMs,
-                        if (duplicate) 0 else bytes.size, jpegDuplicate = duplicate)
-                }
+                sender.offer(EncodedFrame(bytes, quality, frameGeneration, permission, consumer))
+                bitmaps.rememberEncoded(frame)
+                recordFrame(quality, captureCopyMs, encodeMs, 0, 0)
             }
             schedulePoll()
         } catch (e: Exception) {
-            Log.w(TAG, "Screen mirror frame failed", e)
-            val permission = projection
-            releaseCapture()
-            permission?.let { ProjectionSession.stop(it) }
-            updateState(MirroringState.NOT_ALLOWED)
+            failCapture(e)
         }
+    }
+
+    /** Synchronous transport is confined to the car thread, overlapping the next JPEG encode. */
+    private fun sendFrame(frame: EncodedFrame) {
+        if (!deliveryActive || stopped || generation.get() != frame.generation ||
+            ProjectionSession.currentProjection !== frame.permission || callback !== frame.consumer) return
+        try {
+            val duplicate = lastSentGeneration == frame.generation && lastSentFrame?.contentEquals(frame.bytes) == true
+            val started = SystemClock.uptimeMillis()
+            if (!duplicate) {
+                frame.consumer(frame.bytes)
+                lastSentFrame = frame.bytes
+                lastSentGeneration = frame.generation
+            }
+            val sendMs = SystemClock.uptimeMillis() - started
+            captureHandler.post {
+                if (generation.get() == frame.generation && deliveryActive && !stopped) {
+                    if (!duplicate) compression.onFrameSent(sendMs)
+                    frameStats.reportDelivery(SystemClock.uptimeMillis(), outputSize.x, outputSize.y,
+                        minFrameTime, frame.quality, sendMs, if (duplicate) 0 else frame.bytes.size, duplicate)
+                        ?.let { Log.i(TAG, it.logLine()) }
+                }
+            }
+        } catch (e: Exception) {
+            captureHandler.post {
+                if (generation.get() == frame.generation && !stopped) failCapture(e)
+            }
+        }
+    }
+
+    private fun failCapture(error: Exception) {
+        Log.w(TAG, "Screen mirror frame failed", error)
+        val permission = projection
+        releaseCapture()
+        permission?.let { ProjectionSession.stop(it) }
+        updateState(MirroringState.NOT_ALLOWED)
     }
 
     private fun copyImage(image: Image): Bitmap {
@@ -272,4 +357,10 @@ class ScreenMirrorProvider(val handler: Handler) {
             minFrameTime, quality, captureCopyMs, encodeMs, sendMs, sentBytes, unchanged, jpegDuplicate)
             ?.let { Log.i(TAG, it.logLine()) }
     }
+
+    init {
+        // The dedicated worker can run immediately, so all callback fields must exist first.
+        ProjectionSession.addListener(captureHandler, projectionListener)
+    }
+
 }

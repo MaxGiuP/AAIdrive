@@ -79,6 +79,20 @@ class ProjectionFrameStatsTest {
     }
 
     @Test
+    fun pipelineCountsDeliveredFramesInsteadOfAssumingEveryCaptureWasSent() {
+        val stats = ProjectionFrameStats().apply { reset(0) }
+        repeat(150) { stats.reportFrame(it * 33L, 800, 480, 33, 30, 2, 3, 0) }
+        repeat(49) { stats.reportDelivery(4999, 800, 480, 33, 30, 90, 2000) }
+        val summary = stats.reportDelivery(5000, 800, 480, 33, 30, 90, 2000)!!
+        assertEquals(150L, summary.frames)
+        assertEquals(50L, summary.sent)
+        assertEquals(10.0, summary.sendsPerSecond, 0.0)
+        assertEquals(90.0, summary.averageSendMs, 0.0)
+        assertEquals(3.0, summary.averageEncodeMs, 0.0)
+        assertEquals(100000L, summary.bytes)
+    }
+
+    @Test
     fun logOutputIsNumericAndStableAcrossPhoneLocales() {
         val original = Locale.getDefault()
         try {

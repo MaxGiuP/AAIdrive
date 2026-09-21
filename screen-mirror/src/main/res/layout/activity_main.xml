@@ -26,6 +26,20 @@
         <Button android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/btn_projection_help" android:onClick="@{() -> controller.openSetup()}" />
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="12dp" android:labelFor="@id/projection_profile" android:text="@string/lbl_projection_profile" />
+        <Spinner android:id="@+id/projection_profile" android:layout_width="match_parent" android:layout_height="48dp"
+            android:entries="@array/projection_profiles" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/lbl_projection_speed" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:paddingTop="12dp" android:labelFor="@id/knob_mode" android:text="@string/lbl_knob_mode" />
+        <Spinner android:id="@+id/knob_mode" android:layout_width="match_parent" android:layout_height="48dp"
+            android:entries="@array/knob_modes" />
+        <CheckBox android:id="@+id/reverse_knob" android:layout_width="match_parent" android:layout_height="48dp"
+            android:text="@string/lbl_reverse_knob" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/lbl_knob_help" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:paddingTop="12dp" android:paddingBottom="12dp" android:text="@string/lbl_projection_privacy" />
         <Button android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/btn_start_headunit" android:onClick="@{() -> controller.startAndroidAuto()}" />
